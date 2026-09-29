@@ -4,6 +4,12 @@ export type Platform = "spotify" | "youtube" | "appleMusic" | "melon";
 
 export type ReleaseType = "single" | "album" | "ep" | "ost" | "preRelease";
 
+export type ComebackStatus = "rumored" | "announced" | "confirmed" | "released";
+
+export type ComebackType = ReleaseType | "debut" | "fullAlbum" | "miniAlbum" | "singleAlbum" | "japaneseRelease";
+
+export type PlatformLinks = Partial<Record<Platform, string>>;
+
 export type Artist = {
   id: string;
   name: string;
@@ -33,6 +39,22 @@ export type NewsItem = {
   date: string;
   source: string;
   url: string;
+};
+
+export type Comeback = {
+  id: string;
+  artistId: string;
+  artistName: string;
+  scene: MusicScene;
+  title: string;
+  comebackDate: string;
+  comebackTime?: string;
+  type: ComebackType;
+  status: ComebackStatus;
+  coverUrl?: string;
+  sourceUrl?: string;
+  platformLinks: PlatformLinks;
+  notes?: string;
 };
 
 export type DateFilter = "all" | "week" | "month";

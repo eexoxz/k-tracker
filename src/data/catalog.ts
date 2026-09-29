@@ -1,4 +1,4 @@
-import type { Artist, NewsItem, Release } from "../types/music";
+import type { Artist, Comeback, NewsItem, Release } from "../types/music";
 
 export const artists: Artist[] = [
   { id: "aespa", name: "aespa", scene: "kpop", aliases: ["에스파"] },
@@ -99,5 +99,37 @@ export const newsItems: NewsItem[] = [
     date: "2026-09-15",
     source: "News search",
     url: "https://www.google.com/search?q=SEVENTEEN+tour+news"
+  }
+];
+
+export const comebackTemplates: Comeback[] = [
+  {
+    id: "sample-comeback-confirmed",
+    artistId: "aespa",
+    artistName: "aespa",
+    scene: "kpop",
+    title: "Example confirmed comeback",
+    comebackDate: "2026-10-10",
+    comebackTime: "18:00 KST",
+    type: "miniAlbum",
+    status: "confirmed",
+    coverUrl: "",
+    sourceUrl: "",
+    platformLinks: {},
+    notes: "Sample card only. Replace with a real announcement when you start tracking."
+  },
+  {
+    id: "sample-comeback-announced",
+    artistId: "ive",
+    artistName: "IVE",
+    scene: "kpop",
+    title: "Example announced release",
+    comebackDate: "2026-10-18",
+    type: "singleAlbum",
+    status: "announced",
+    coverUrl: "",
+    sourceUrl: "",
+    platformLinks: {},
+    notes: "Use source links to keep dates trustworthy instead of guessing."
   }
 ];
