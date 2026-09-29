@@ -1,6 +1,8 @@
 import {
   Bell,
   CalendarDays,
+  Check,
+  Download,
   ExternalLink,
   Filter,
   Heart,
@@ -10,8 +12,10 @@ import {
   Newspaper,
   Plus,
   Search,
+  Settings,
   Star,
-  Trash2
+  Trash2,
+  Upload
 } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -60,6 +64,28 @@ const comebackStatuses: Array<{ id: ComebackStatus; label: string }> = [
   { id: "released", label: "Released" }
 ];
 
+type ActiveView = "today" | "calendar" | "add" | "releases" | "news" | "settings";
+type StatusFilter = "all" | ComebackStatus | "missingSource" | "unseen";
+
+const appViews: Array<{ id: ActiveView; label: string }> = [
+  { id: "today", label: "Today" },
+  { id: "calendar", label: "Calendar" },
+  { id: "add", label: "Add" },
+  { id: "releases", label: "Releases" },
+  { id: "news", label: "News" },
+  { id: "settings", label: "Data" }
+];
+
+const statusFilters: Array<{ id: StatusFilter; label: string }> = [
+  { id: "all", label: "All statuses" },
+  { id: "confirmed", label: "Confirmed" },
+  { id: "announced", label: "Announced" },
+  { id: "rumored", label: "Rumored" },
+  { id: "released", label: "Released" },
+  { id: "missingSource", label: "Needs source" },
+  { id: "unseen", label: "Unseen" }
+];
+
 const today = new Date();
 
 type LocalPreferences = {
@@ -68,6 +94,8 @@ type LocalPreferences = {
   dateFilter: DateFilter;
   platformFilter: "all" | Platform;
   watchlistOnly: boolean;
+  activeView: ActiveView;
+  statusFilter: StatusFilter;
 };
 
 const defaultPreferences: LocalPreferences = {
@@ -75,7 +103,9 @@ const defaultPreferences: LocalPreferences = {
   selectedArtist: "all",
   dateFilter: "month",
   platformFilter: "all",
-  watchlistOnly: false
+  watchlistOnly: false,
+  activeView: "today",
+  statusFilter: "all"
 };
 
 function isWithinFilter(date: string, filter: DateFilter) {
@@ -106,6 +136,20 @@ function formatDate(date: string) {
   }).format(new Date(`${date}T00:00:00`));
 }
 
+function daysUntil(date: string) {
+  const targetDate = new Date(`${date}T00:00:00`);
+  return Math.ceil((targetDate.getTime() - today.getTime()) / 86_400_000);
+}
+
+function formatCountdown(date: string) {
+  const days = daysUntil(date);
+  if (days === 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  if (days === -1) return "Yesterday";
+  if (days > 1) return `${days} days away`;
+  return `${Math.abs(days)} days ago`;
+}
+
 function createArtistId(name: string) {
   const slug = name
     .trim()
@@ -134,7 +178,7 @@ function normalizeUrl(url: string) {
 
 export default function App() {
   const [preferences, setPreferences] = useState<LocalPreferences>(() =>
-    readStoredValue("preferences", defaultPreferences)
+    ({ ...defaultPreferences, ...readStoredValue<Partial<LocalPreferences>>("preferences", defaultPreferences) })
   );
   const [scene, setScene] = useState<MusicScene>(preferences.scene);
   const [artistQuery, setArtistQuery] = useState("");
@@ -158,15 +202,24 @@ export default function App() {
   const [dateFilter, setDateFilter] = useState<DateFilter>(preferences.dateFilter);
   const [platformFilter, setPlatformFilter] = useState<"all" | Platform>(preferences.platformFilter);
   const [watchlistOnly, setWatchlistOnly] = useState(preferences.watchlistOnly);
+  const [activeView, setActiveView] = useState<ActiveView>(preferences.activeView);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(preferences.statusFilter);
   const [watchlist, setWatchlist] = useState<string[]>(() => readStringList("watchlist", ["aespa", "ive", "iu"]));
+  const [seenComebacks, setSeenComebacks] = useState<string[]>(() => readStringList("seenComebacks"));
   const [customArtists, setCustomArtists] = useState(() => readStoredValue<typeof artists>("customArtists", []));
   const [localComebacks, setLocalComebacks] = useState<Comeback[]>(() =>
     readStoredValue("comebacks", comebackTemplates)
   );
+  const [backupText, setBackupText] = useState("");
+  const [backupMessage, setBackupMessage] = useState("");
 
   useEffect(() => {
     writeStringList("watchlist", watchlist);
   }, [watchlist]);
+
+  useEffect(() => {
+    writeStringList("seenComebacks", seenComebacks);
+  }, [seenComebacks]);
 
   useEffect(() => {
     writeStoredValue("customArtists", customArtists);
@@ -177,10 +230,10 @@ export default function App() {
   }, [localComebacks]);
 
   useEffect(() => {
-    const nextPreferences = { scene, selectedArtist, dateFilter, platformFilter, watchlistOnly };
+    const nextPreferences = { scene, selectedArtist, dateFilter, platformFilter, watchlistOnly, activeView, statusFilter };
     setPreferences(nextPreferences);
     writeStoredValue("preferences", nextPreferences);
-  }, [dateFilter, platformFilter, scene, selectedArtist, watchlistOnly]);
+  }, [activeView, dateFilter, platformFilter, scene, selectedArtist, statusFilter, watchlistOnly]);
 
   const allArtists = useMemo(() => [...artists, ...customArtists], [customArtists]);
   const customArtistIds = useMemo(() => new Set(customArtists.map((artist) => artist.id)), [customArtists]);
@@ -234,13 +287,53 @@ export default function App() {
       .filter((comeback) => isComebackWithinFilter(comeback.comebackDate, dateFilter))
       .filter((comeback) => (platformFilter === "all" ? true : Boolean(comeback.platformLinks[platformFilter])))
       .filter((comeback) => {
+        if (statusFilter === "all") return true;
+        if (statusFilter === "missingSource") return !comeback.sourceUrl;
+        if (statusFilter === "unseen") return !seenComebacks.includes(comeback.id);
+        return comeback.status === statusFilter;
+      })
+      .filter((comeback) => {
         if (!query) return true;
         return `${comeback.artistName} ${comeback.title} ${comeback.type} ${comeback.status}`
           .toLowerCase()
           .includes(query);
       })
       .sort((a, b) => a.comebackDate.localeCompare(b.comebackDate));
-  }, [dateFilter, localComebacks, platformFilter, releaseQuery, scene, selectedArtist, watchlist, watchlistOnly]);
+  }, [
+    dateFilter,
+    localComebacks,
+    platformFilter,
+    releaseQuery,
+    scene,
+    seenComebacks,
+    selectedArtist,
+    statusFilter,
+    watchlist,
+    watchlistOnly
+  ]);
+
+  const sceneComebacks = useMemo(
+    () =>
+      localComebacks
+        .filter((comeback) => comeback.scene === scene)
+        .filter((comeback) => (watchlistOnly ? watchlist.includes(comeback.artistId) : true)),
+    [localComebacks, scene, watchlist, watchlistOnly]
+  );
+
+  const upcomingComebacks = useMemo(
+    () =>
+      sceneComebacks
+        .filter((comeback) => daysUntil(comeback.comebackDate) >= 0)
+        .sort((a, b) => a.comebackDate.localeCompare(b.comebackDate)),
+    [sceneComebacks]
+  );
+
+  const nextComeback = upcomingComebacks[0];
+  const dueSoonComebacks = upcomingComebacks.filter((comeback) => daysUntil(comeback.comebackDate) <= 7);
+  const missingSourceComebacks = sceneComebacks.filter((comeback) => !comeback.sourceUrl);
+  const unseenReleasedComebacks = sceneComebacks.filter(
+    (comeback) => comeback.status === "released" && !seenComebacks.includes(comeback.id)
+  );
 
   const filteredNews = useMemo(
     () =>
@@ -279,6 +372,9 @@ export default function App() {
     setCustomArtists((current) => current.filter((artist) => artist.id !== artistId));
     setWatchlist((current) => current.filter((id) => id !== artistId));
     setLocalComebacks((current) => current.filter((comeback) => comeback.artistId !== artistId));
+    setSeenComebacks((current) =>
+      current.filter((id) => localComebacks.some((comeback) => comeback.id === id && comeback.artistId !== artistId))
+    );
   }
 
   function addComeback(event: FormEvent<HTMLFormElement>) {
@@ -329,6 +425,19 @@ export default function App() {
 
   function removeComeback(comebackId: string) {
     setLocalComebacks((current) => current.filter((comeback) => comeback.id !== comebackId));
+    setSeenComebacks((current) => current.filter((id) => id !== comebackId));
+  }
+
+  function updateComebackStatus(comebackId: string, status: ComebackStatus) {
+    setLocalComebacks((current) =>
+      current.map((comeback) => (comeback.id === comebackId ? { ...comeback, status } : comeback))
+    );
+  }
+
+  function toggleSeenComeback(comebackId: string) {
+    setSeenComebacks((current) =>
+      current.includes(comebackId) ? current.filter((id) => id !== comebackId) : [...current, comebackId]
+    );
   }
 
   function getComebackLinks(comeback: Comeback) {
@@ -343,6 +452,51 @@ export default function App() {
       platform,
       buildPlatformSearchUrl(platform, comeback.artistName, comeback.title)
     ] as [Platform, string]);
+  }
+
+  function exportLocalData() {
+    const payload = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      customArtists,
+      watchlist,
+      comebacks: localComebacks,
+      seenComebacks,
+      preferences
+    };
+
+    setBackupText(JSON.stringify(payload, null, 2));
+    setBackupMessage("Backup generated. Keep this text somewhere safe if you want a manual copy.");
+  }
+
+  function importLocalData() {
+    try {
+      const payload = JSON.parse(backupText) as {
+        customArtists?: typeof artists;
+        watchlist?: string[];
+        comebacks?: Comeback[];
+        seenComebacks?: string[];
+        preferences?: Partial<LocalPreferences>;
+      };
+
+      if (Array.isArray(payload.customArtists)) setCustomArtists(payload.customArtists);
+      if (Array.isArray(payload.watchlist)) setWatchlist(payload.watchlist);
+      if (Array.isArray(payload.comebacks)) setLocalComebacks(payload.comebacks);
+      if (Array.isArray(payload.seenComebacks)) setSeenComebacks(payload.seenComebacks);
+      if (payload.preferences) {
+        setScene(payload.preferences.scene ?? scene);
+        setSelectedArtist(payload.preferences.selectedArtist ?? selectedArtist);
+        setDateFilter(payload.preferences.dateFilter ?? dateFilter);
+        setPlatformFilter(payload.preferences.platformFilter ?? platformFilter);
+        setWatchlistOnly(payload.preferences.watchlistOnly ?? watchlistOnly);
+        setActiveView(payload.preferences.activeView ?? activeView);
+        setStatusFilter(payload.preferences.statusFilter ?? statusFilter);
+      }
+
+      setBackupMessage("Backup imported into local storage.");
+    } catch {
+      setBackupMessage("Could not import that backup. Check that it is valid JSON.");
+    }
   }
 
   return (
@@ -437,12 +591,14 @@ export default function App() {
         <header className="topbar">
           <div>
             <p className="eyebrow">K-pop first, expandable later</p>
-            <h2>Newest releases and artist updates</h2>
-            <p className="topbar-note">Personal watchlist is saved locally on this PC. Release/news data is still manual sample data.</p>
+            <h2>Comeback tracker for the stuff you actually care about</h2>
+            <p className="topbar-note">
+              Local-first for now: watchlist, comebacks, seen items, and backups stay on this PC.
+            </p>
           </div>
-          <button className="sync-button" type="button">
+          <button className="sync-button" type="button" onClick={() => setActiveView("calendar")}>
             <Bell size={18} />
-            Check releases
+            Review calendar
           </button>
         </header>
 
@@ -454,20 +610,33 @@ export default function App() {
           </article>
           <article>
             <CalendarDays size={18} />
-            <span>{filteredReleases.length}</span>
-            <small>matching releases</small>
+            <span>{dueSoonComebacks.length}</span>
+            <small>due soon</small>
           </article>
           <article>
             <CalendarDays size={18} />
-            <span>{filteredComebacks.length}</span>
-            <small>tracked comebacks</small>
+            <span>{unseenReleasedComebacks.length}</span>
+            <small>unseen releases</small>
           </article>
           <article>
-            <Newspaper size={18} />
-            <span>{filteredNews.length}</span>
-            <small>updates</small>
+            <Link2 size={18} />
+            <span>{missingSourceComebacks.length}</span>
+            <small>need sources</small>
           </article>
         </section>
+
+        <nav className="view-tabs" aria-label="App views">
+          {appViews.map((view) => (
+            <button
+              key={view.id}
+              type="button"
+              className={activeView === view.id ? "active" : ""}
+              onClick={() => setActiveView(view.id)}
+            >
+              {view.label}
+            </button>
+          ))}
+        </nav>
 
         <section className="filter-panel" aria-label="Release filters">
           <label className="search-box release-search">
@@ -507,6 +676,14 @@ export default function App() {
             ))}
           </select>
 
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}>
+            {statusFilters.map((filter) => (
+              <option value={filter.id} key={filter.id}>
+                {filter.label}
+              </option>
+            ))}
+          </select>
+
           <label className="toggle">
             <input
               type="checkbox"
@@ -517,7 +694,60 @@ export default function App() {
           </label>
         </section>
 
-        <section className="comeback-builder" aria-label="Add comeback">
+        {activeView === "today" ? (
+          <section className="today-grid" aria-label="Today overview">
+            <article className="today-spotlight">
+              <p className="eyebrow">Next comeback</p>
+              {nextComeback ? (
+                <>
+                  <h2>{nextComeback.title}</h2>
+                  <p className="artist-name">{nextComeback.artistName}</p>
+                  <p className="summary">
+                    {formatDate(nextComeback.comebackDate)}
+                    {nextComeback.comebackTime ? ` · ${nextComeback.comebackTime}` : ""} ·{" "}
+                    {formatCountdown(nextComeback.comebackDate)}
+                  </p>
+                  <div className="meta-row">
+                    <span>{comebackTypes.find((type) => type.id === nextComeback.type)?.label ?? nextComeback.type}</span>
+                    <span>
+                      {comebackStatuses.find((status) => status.id === nextComeback.status)?.label ?? nextComeback.status}
+                    </span>
+                  </div>
+                  <div className="platform-links">
+                    {getComebackLinks(nextComeback).map(([platform, url]) => (
+                      <a href={url} target="_blank" rel="noreferrer" key={`spotlight-${platform}`}>
+                        {platformLabels[platform]}
+                      </a>
+                    ))}
+                    {nextComeback.sourceUrl ? (
+                      <a href={nextComeback.sourceUrl} target="_blank" rel="noreferrer">
+                        <ExternalLink size={14} />
+                        Source
+                      </a>
+                    ) : null}
+                  </div>
+                </>
+              ) : (
+                <p className="summary">No upcoming comeback yet. Add one from the Add view.</p>
+              )}
+            </article>
+            <article className="today-list">
+              <p className="eyebrow">Needs attention</p>
+              <button type="button" onClick={() => setStatusFilter("missingSource")}>
+                {missingSourceComebacks.length} missing source links
+              </button>
+              <button type="button" onClick={() => setStatusFilter("unseen")}>
+                {unseenReleasedComebacks.length} released but unseen
+              </button>
+              <button type="button" onClick={() => setDateFilter("week")}>
+                {dueSoonComebacks.length} within a week
+              </button>
+            </article>
+          </section>
+        ) : null}
+
+        {activeView === "add" ? (
+          <section className="comeback-builder" aria-label="Add comeback">
           <div className="section-heading">
             <CalendarDays size={18} />
             <h2>Add comeback</h2>
@@ -604,7 +834,12 @@ export default function App() {
               placeholder="YouTube link"
               aria-label="YouTube link"
             />
-            <input value={newMelonUrl} onChange={(event) => setNewMelonUrl(event.target.value)} placeholder="Melon link" aria-label="Melon link" />
+            <input
+              value={newMelonUrl}
+              onChange={(event) => setNewMelonUrl(event.target.value)}
+              placeholder="Melon link"
+              aria-label="Melon link"
+            />
             <textarea
               value={newComebackNotes}
               onChange={(event) => setNewComebackNotes(event.target.value)}
@@ -616,9 +851,11 @@ export default function App() {
               Add comeback
             </button>
           </form>
-        </section>
+          </section>
+        ) : null}
 
-        <section className="comeback-section" aria-label="Comeback calendar">
+        {activeView === "today" || activeView === "calendar" ? (
+          <section className="comeback-section" aria-label="Comeback calendar">
           <div className="section-heading">
             <CalendarDays size={18} />
             <h2>Comeback calendar</h2>
@@ -627,9 +864,10 @@ export default function App() {
             {filteredComebacks.map((comeback) => {
               const links = getComebackLinks(comeback);
               const isSample = comeback.id.startsWith("sample-");
+              const isSeen = seenComebacks.includes(comeback.id);
 
               return (
-                <article className="comeback-card" key={comeback.id}>
+                <article className={`comeback-card ${isSeen ? "is-seen" : ""}`} key={comeback.id}>
                   <div className="cover-frame">
                     {comeback.coverUrl ? (
                       <img src={comeback.coverUrl} alt={`${comeback.title} cover`} />
@@ -656,7 +894,24 @@ export default function App() {
                     <p className="artist-name">{comeback.artistName}</p>
                     <div className="meta-row">
                       <span>{comebackTypes.find((type) => type.id === comeback.type)?.label ?? comeback.type}</span>
-                      <span>{comebackStatuses.find((status) => status.id === comeback.status)?.label ?? comeback.status}</span>
+                      <span>{formatCountdown(comeback.comebackDate)}</span>
+                    </div>
+                    <div className="comeback-actions">
+                      <select
+                        value={comeback.status}
+                        onChange={(event) => updateComebackStatus(comeback.id, event.target.value as ComebackStatus)}
+                        aria-label={`Status for ${comeback.title}`}
+                      >
+                        {comebackStatuses.map((status) => (
+                          <option value={status.id} key={status.id}>
+                            {status.label}
+                          </option>
+                        ))}
+                      </select>
+                      <button type="button" className={isSeen ? "seen" : ""} onClick={() => toggleSeenComeback(comeback.id)}>
+                        <Check size={14} />
+                        {isSeen ? "Seen" : "Mark seen"}
+                      </button>
                     </div>
                     {comeback.notes ? <p className="summary">{comeback.notes}</p> : null}
                     {isSample ? <p className="sample-label">Example entry only. Replace with a real comeback.</p> : null}
@@ -689,9 +944,11 @@ export default function App() {
               </article>
             ) : null}
           </div>
-        </section>
+          </section>
+        ) : null}
 
-        <section className="release-grid" aria-label="Newest releases">
+        {activeView === "releases" ? (
+          <section className="release-grid" aria-label="Newest releases">
           {filteredReleases.map((release) => (
             <article className="release-card" key={release.id}>
               <div className="release-header">
@@ -724,9 +981,11 @@ export default function App() {
               <p>Try changing filters, or add artists to your watchlist and use the quick platform searches for now.</p>
             </article>
           ) : null}
-        </section>
+          </section>
+        ) : null}
 
-        <section className="news-section" aria-label="Artist updates">
+        {activeView === "news" ? (
+          <section className="news-section" aria-label="Artist updates">
           <div className="section-heading">
             <Newspaper size={18} />
             <h2>News radar</h2>
@@ -744,7 +1003,37 @@ export default function App() {
               </a>
             ))}
           </div>
-        </section>
+          </section>
+        ) : null}
+
+        {activeView === "settings" ? (
+          <section className="data-panel" aria-label="Local data backup">
+            <div className="section-heading">
+              <Settings size={18} />
+              <h2>Local data</h2>
+            </div>
+            <p className="summary">
+              This creates a manual JSON backup of your local artists, watchlist, comeback calendar, seen state, and
+              preferences.
+            </p>
+            <div className="data-actions">
+              <button type="button" onClick={exportLocalData}>
+                <Download size={16} />
+                Export backup
+              </button>
+              <button type="button" onClick={importLocalData}>
+                <Upload size={16} />
+                Import backup
+              </button>
+            </div>
+            <textarea
+              value={backupText}
+              onChange={(event) => setBackupText(event.target.value)}
+              placeholder="Exported backup JSON appears here. Paste a backup here to import."
+            />
+            {backupMessage ? <p className="sample-label">{backupMessage}</p> : null}
+          </section>
+        ) : null}
       </section>
     </main>
   );
