@@ -1,4 +1,5 @@
-import { Bell, CalendarDays, Filter, Heart, Music2, Newspaper, Plus, Search, Star } from "lucide-react";
+import { Bell, CalendarDays, Filter, Heart, Music2, Newspaper, Plus, Search, Star, Trash2 } from "lucide-react";
+import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { artists, newsItems, releases } from "./data/catalog";
 import type { DateFilter, MusicScene, Platform } from "./types/music";
@@ -62,22 +63,39 @@ function formatDate(date: string) {
   }).format(new Date(`${date}T00:00:00`));
 }
 
+function createArtistId(name: string) {
+  const slug = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+
+  return `local-${slug || "artist"}-${Date.now()}`;
+}
+
 export default function App() {
   const [preferences, setPreferences] = useState<LocalPreferences>(() =>
     readStoredValue("preferences", defaultPreferences)
   );
   const [scene, setScene] = useState<MusicScene>(preferences.scene);
   const [artistQuery, setArtistQuery] = useState("");
+  const [newArtistName, setNewArtistName] = useState("");
+  const [newArtistAliases, setNewArtistAliases] = useState("");
   const [releaseQuery, setReleaseQuery] = useState("");
   const [selectedArtist, setSelectedArtist] = useState(preferences.selectedArtist);
   const [dateFilter, setDateFilter] = useState<DateFilter>(preferences.dateFilter);
   const [platformFilter, setPlatformFilter] = useState<"all" | Platform>(preferences.platformFilter);
   const [watchlistOnly, setWatchlistOnly] = useState(preferences.watchlistOnly);
   const [watchlist, setWatchlist] = useState<string[]>(() => readStringList("watchlist", ["aespa", "ive", "iu"]));
+  const [customArtists, setCustomArtists] = useState(() => readStoredValue<typeof artists>("customArtists", []));
 
   useEffect(() => {
     writeStringList("watchlist", watchlist);
   }, [watchlist]);
+
+  useEffect(() => {
+    writeStoredValue("customArtists", customArtists);
+  }, [customArtists]);
 
   useEffect(() => {
     const nextPreferences = { scene, selectedArtist, dateFilter, platformFilter, watchlistOnly };
@@ -85,7 +103,15 @@ export default function App() {
     writeStoredValue("preferences", nextPreferences);
   }, [dateFilter, platformFilter, scene, selectedArtist, watchlistOnly]);
 
-  const sceneArtists = useMemo(() => artists.filter((artist) => artist.scene === scene), [scene]);
+  const allArtists = useMemo(() => [...artists, ...customArtists], [customArtists]);
+  const customArtistIds = useMemo(() => new Set(customArtists.map((artist) => artist.id)), [customArtists]);
+  const sceneArtists = useMemo(() => allArtists.filter((artist) => artist.scene === scene), [allArtists, scene]);
+
+  useEffect(() => {
+    if (selectedArtist !== "all" && !allArtists.some((artist) => artist.id === selectedArtist)) {
+      setSelectedArtist("all");
+    }
+  }, [allArtists, selectedArtist]);
 
   const matchingArtists = useMemo(() => {
     const query = artistQuery.trim().toLowerCase();
@@ -128,6 +154,29 @@ export default function App() {
     );
   }
 
+  function addCustomArtist(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const name = newArtistName.trim();
+    if (!name) return;
+
+    const aliases = newArtistAliases
+      .split(",")
+      .map((alias) => alias.trim())
+      .filter(Boolean);
+    const artist = { id: createArtistId(name), name, scene, aliases };
+
+    setCustomArtists((current) => [...current, artist]);
+    setWatchlist((current) => [...new Set([...current, artist.id])]);
+    setNewArtistName("");
+    setNewArtistAliases("");
+  }
+
+  function removeCustomArtist(artistId: string) {
+    setCustomArtists((current) => current.filter((artist) => artist.id !== artistId));
+    setWatchlist((current) => current.filter((id) => id !== artistId));
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar" aria-label="Artist watchlist">
@@ -165,26 +214,54 @@ export default function App() {
           />
         </label>
 
+        <form className="add-artist-form" onSubmit={addCustomArtist}>
+          <input
+            value={newArtistName}
+            onChange={(event) => setNewArtistName(event.target.value)}
+            placeholder="Add artist"
+            aria-label="Artist name"
+          />
+          <input
+            value={newArtistAliases}
+            onChange={(event) => setNewArtistAliases(event.target.value)}
+            placeholder="Aliases, optional"
+            aria-label="Artist aliases"
+          />
+          <button type="submit" title="Add artist to watchlist">
+            <Plus size={17} />
+          </button>
+        </form>
+
         <section className="artist-list" aria-label="Artists">
           {matchingArtists.map((artist) => {
             const saved = watchlist.includes(artist.id);
+            const isCustom = customArtistIds.has(artist.id);
 
             return (
-              <button
-                type="button"
-                key={artist.id}
-                className="artist-row"
-                onClick={() => toggleWatchlist(artist.id)}
-                aria-pressed={saved}
-              >
-                <span>
-                  <strong>{artist.name}</strong>
-                  <small>{artist.aliases?.[0] ?? "K-pop artist"}</small>
-                </span>
-                <Heart size={18} className={saved ? "saved" : ""} fill={saved ? "currentColor" : "none"} />
-              </button>
+              <div className="artist-row" key={artist.id}>
+                <button type="button" onClick={() => toggleWatchlist(artist.id)} aria-pressed={saved}>
+                  <span>
+                    <strong>{artist.name}</strong>
+                    <small>{artist.aliases?.[0] ?? (isCustom ? "Saved locally" : "K-pop artist")}</small>
+                  </span>
+                  <Heart size={18} className={saved ? "saved" : ""} fill={saved ? "currentColor" : "none"} />
+                </button>
+                {isCustom ? (
+                  <button
+                    type="button"
+                    className="delete-artist"
+                    onClick={() => removeCustomArtist(artist.id)}
+                    title={`Remove ${artist.name}`}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                ) : null}
+              </div>
             );
           })}
+          {matchingArtists.length === 0 ? (
+            <p className="empty-note">No artists found. Add one above and it will be saved on this PC.</p>
+          ) : null}
         </section>
       </aside>
 
@@ -193,6 +270,7 @@ export default function App() {
           <div>
             <p className="eyebrow">K-pop first, expandable later</p>
             <h2>Newest releases and artist updates</h2>
+            <p className="topbar-note">Personal watchlist is saved locally on this PC. Release/news data is still manual sample data.</p>
           </div>
           <button className="sync-button" type="button">
             <Bell size={18} />
@@ -278,6 +356,7 @@ export default function App() {
               </div>
               <p className="artist-name">{release.artistName}</p>
               <p className="summary">{release.summary}</p>
+              <p className="sample-label">Sample entry until a real source is connected</p>
               <div className="platform-links">
                 {release.platformHints.map((platform) => (
                   <a
@@ -292,6 +371,12 @@ export default function App() {
               </div>
             </article>
           ))}
+          {filteredReleases.length === 0 ? (
+            <article className="empty-card">
+              <h3>No matching releases</h3>
+              <p>Try changing filters, or add artists to your watchlist and use the quick platform searches for now.</p>
+            </article>
+          ) : null}
         </section>
 
         <section className="news-section" aria-label="Artist updates">
