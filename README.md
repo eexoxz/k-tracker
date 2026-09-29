@@ -5,9 +5,10 @@ A lightweight desktop-first K-pop release tracker built with React, TypeScript, 
 The first version focuses on the simple workflow:
 
 - Save K-pop artists to a personal watchlist.
+- Open an artist page for releases, recent official posts, and source links.
 - Refresh saved artists from MusicBrainz to show upcoming release groups and current discography.
 - Display release cards with album art when Cover Art Archive has an image.
-- Open quick Spotify, YouTube, Apple Music, Melon, and MusicBrainz links.
+- Open quick icon links for Spotify, YouTube, Apple Music, Melon, MusicBrainz, and official artist sources.
 - Search and filter the fetched release data by saved artist.
 - Keep the internal model scene-based so Mandopop, J-pop, or English pop can be added later.
 
@@ -15,7 +16,19 @@ The first version focuses on the simple workflow:
 
 K-tracker currently remembers the watchlist, filter preferences, custom artists, fetched release cache, and last refresh time on this PC with browser/Tauri local storage. That keeps the personal version simple and fast. Firebase is intentionally left as a future sync layer, so login and cloud watchlists can be added later without changing the main app shape.
 
-The current API source is MusicBrainz, which is useful for discography and release-group dates but may not have every future K-pop comeback announcement. Spotify/YouTube API integration can be added later for richer metadata and official MV checks.
+## Source plan
+
+Current working sources:
+
+- MusicBrainz API for release-group metadata.
+- Cover Art Archive for album/release artwork when available.
+- Official/social/search links attached to each artist.
+
+Prepared but optional:
+
+- YouTube Data API for recent official uploads. Add `VITE_YOUTUBE_API_KEY` to `.env.local` and add `youtubeChannelId` to artists before enabling this fully.
+
+Important limitation: MusicBrainz is useful for discography and release-group dates, but it may not have every future K-pop comeback announcement. X and Instagram links can be shown as official sources, but reading their feeds requires approved platform APIs/tokens. The app should not scrape or invent posts, because accuracy matters more than making the feed look full.
 
 ## Run the web app
 

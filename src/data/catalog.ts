@@ -1,135 +1,96 @@
-import type { Artist, Comeback, NewsItem, Release } from "../types/music";
+import type { Artist } from "../types/music";
 
 export const artists: Artist[] = [
-  { id: "aespa", name: "aespa", scene: "kpop", aliases: ["에스파"] },
-  { id: "ive", name: "IVE", scene: "kpop", aliases: ["아이브"] },
-  { id: "newjeans", name: "NewJeans", scene: "kpop", aliases: ["뉴진스"] },
-  { id: "le-sserafim", name: "LE SSERAFIM", scene: "kpop", aliases: ["르세라핌"] },
-  { id: "seventeen", name: "SEVENTEEN", scene: "kpop", aliases: ["세븐틴"] },
-  { id: "stray-kids", name: "Stray Kids", scene: "kpop", aliases: ["SKZ", "스트레이 키즈"] },
-  { id: "iu", name: "IU", scene: "kpop", aliases: ["아이유"] },
-  { id: "taeyeon", name: "TAEYEON", scene: "kpop", aliases: ["태연"] }
-];
-
-export const releases: Release[] = [
   {
-    id: "aespa-supernova",
-    artistId: "aespa",
-    artistName: "aespa",
-    title: "Supernova",
+    id: "aespa",
+    name: "aespa",
     scene: "kpop",
-    releaseDate: "2026-09-21",
-    type: "single",
-    platformHints: ["spotify", "youtube", "appleMusic", "melon"],
-    summary: "Bright electronic single with quick links for streaming searches."
+    aliases: ["에스파"],
+    musicBrainzId: "2e33d91b-2421-470a-9b47-e475ed5e45c8",
+    sources: [
+      { id: "instagram", label: "Instagram", handle: "@aespa_official", url: "https://www.instagram.com/aespa_official/", kind: "official" },
+      { id: "x", label: "X", handle: "@aespa_Official", url: "https://x.com/aespa_Official", kind: "official" },
+      { id: "youtube", label: "YouTube", handle: "@aespa", url: "https://www.youtube.com/@aespa", kind: "official" },
+      { id: "spotify", label: "Spotify", url: "https://open.spotify.com/search/aespa", kind: "search" }
+    ]
   },
   {
-    id: "ive-summer-festa",
-    artistId: "ive",
-    artistName: "IVE",
-    title: "Summer Festa",
+    id: "ive",
+    name: "IVE",
     scene: "kpop",
-    releaseDate: "2026-09-18",
-    type: "ep",
-    platformHints: ["spotify", "youtube", "appleMusic"],
-    summary: "EP placeholder entry for watchlist and date filtering."
+    aliases: ["아이브"],
+    sources: [
+      { id: "instagram", label: "Instagram", handle: "@ivestarship", url: "https://www.instagram.com/ivestarship/", kind: "official" },
+      { id: "x", label: "X", handle: "@IVEstarship", url: "https://x.com/IVEstarship", kind: "official" },
+      { id: "youtube", label: "YouTube", handle: "@IVEstarship", url: "https://www.youtube.com/@IVEstarship", kind: "official" },
+      { id: "spotify", label: "Spotify", url: "https://open.spotify.com/search/IVE", kind: "search" }
+    ]
   },
   {
-    id: "iu-night-letter-live",
-    artistId: "iu",
-    artistName: "IU",
-    title: "Night Letter Live",
+    id: "newjeans",
+    name: "NewJeans",
     scene: "kpop",
-    releaseDate: "2026-09-14",
-    type: "single",
-    platformHints: ["youtube", "melon"],
-    summary: "Live performance-style release for testing platform-specific results."
+    aliases: ["뉴진스"],
+    sources: [
+      { id: "youtube", label: "YouTube", url: "https://www.youtube.com/results?search_query=NewJeans+official", kind: "search" },
+      { id: "spotify", label: "Spotify", url: "https://open.spotify.com/search/NewJeans", kind: "search" }
+    ]
   },
   {
-    id: "skz-neon-run",
-    artistId: "stray-kids",
-    artistName: "Stray Kids",
-    title: "Neon Run",
+    id: "le-sserafim",
+    name: "LE SSERAFIM",
     scene: "kpop",
-    releaseDate: "2026-09-09",
-    type: "album",
-    platformHints: ["spotify", "youtube", "appleMusic"],
-    summary: "Album entry to make the newest-release feed feel populated."
+    aliases: ["르세라핌"],
+    sources: [
+      { id: "instagram", label: "Instagram", handle: "@le_sserafim", url: "https://www.instagram.com/le_sserafim/", kind: "official" },
+      { id: "youtube", label: "YouTube", handle: "@LESSERAFIM_official", url: "https://www.youtube.com/@LESSERAFIM_official", kind: "official" },
+      { id: "spotify", label: "Spotify", url: "https://open.spotify.com/search/LE%20SSERAFIM", kind: "search" }
+    ]
   },
   {
-    id: "taeyeon-dawnline",
-    artistId: "taeyeon",
-    artistName: "TAEYEON",
-    title: "Dawnline",
+    id: "seventeen",
+    name: "SEVENTEEN",
     scene: "kpop",
-    releaseDate: "2026-08-30",
-    type: "ost",
-    platformHints: ["spotify", "youtube", "appleMusic", "melon"],
-    summary: "OST-style release for category variety."
-  }
-];
-
-export const newsItems: NewsItem[] = [
-  {
-    id: "aespa-teaser",
-    artistId: "aespa",
-    artistName: "aespa",
-    scene: "kpop",
-    title: "Comeback teaser schedule added",
-    date: "2026-09-23",
-    source: "Official channels",
-    url: "https://www.youtube.com/results?search_query=aespa+comeback+teaser"
+    aliases: ["세븐틴"],
+    sources: [
+      { id: "instagram", label: "Instagram", handle: "@saythename_17", url: "https://www.instagram.com/saythename_17/", kind: "official" },
+      { id: "x", label: "X", handle: "@pledis_17", url: "https://x.com/pledis_17", kind: "official" },
+      { id: "youtube", label: "YouTube", handle: "@pledis17", url: "https://www.youtube.com/@pledis17", kind: "official" },
+      { id: "spotify", label: "Spotify", url: "https://open.spotify.com/search/SEVENTEEN", kind: "search" }
+    ]
   },
   {
-    id: "ive-stage",
-    artistId: "ive",
-    artistName: "IVE",
+    id: "stray-kids",
+    name: "Stray Kids",
     scene: "kpop",
-    title: "Music show performance links are trending",
-    date: "2026-09-20",
-    source: "YouTube search",
-    url: "https://www.youtube.com/results?search_query=IVE+music+show+performance"
+    aliases: ["SKZ", "스트레이 키즈"],
+    sources: [
+      { id: "instagram", label: "Instagram", handle: "@realstraykids", url: "https://www.instagram.com/realstraykids/", kind: "official" },
+      { id: "x", label: "X", handle: "@Stray_Kids", url: "https://x.com/Stray_Kids", kind: "official" },
+      { id: "youtube", label: "YouTube", handle: "@StrayKids", url: "https://www.youtube.com/@StrayKids", kind: "official" },
+      { id: "spotify", label: "Spotify", url: "https://open.spotify.com/search/Stray%20Kids", kind: "search" }
+    ]
   },
   {
-    id: "seventeen-tour",
-    artistId: "seventeen",
-    artistName: "SEVENTEEN",
+    id: "iu",
+    name: "IU",
     scene: "kpop",
-    title: "Tour-related update placeholder",
-    date: "2026-09-15",
-    source: "News search",
-    url: "https://www.google.com/search?q=SEVENTEEN+tour+news"
-  }
-];
-
-export const comebackTemplates: Comeback[] = [
-  {
-    id: "sample-comeback-confirmed",
-    artistId: "aespa",
-    artistName: "aespa",
-    scene: "kpop",
-    title: "Example confirmed comeback",
-    comebackDate: "2026-10-10",
-    comebackTime: "18:00 KST",
-    type: "miniAlbum",
-    status: "confirmed",
-    coverUrl: "",
-    sourceUrl: "",
-    platformLinks: {},
-    notes: "Sample card only. Replace with a real announcement when you start tracking."
+    aliases: ["아이유", "이지은"],
+    sources: [
+      { id: "instagram", label: "Instagram", handle: "@dlwlrma", url: "https://www.instagram.com/dlwlrma/", kind: "official" },
+      { id: "youtube", label: "YouTube", handle: "@dlwlrma", url: "https://www.youtube.com/@dlwlrma", kind: "official" },
+      { id: "spotify", label: "Spotify", url: "https://open.spotify.com/search/IU", kind: "search" }
+    ]
   },
   {
-    id: "sample-comeback-announced",
-    artistId: "ive",
-    artistName: "IVE",
+    id: "taeyeon",
+    name: "TAEYEON",
     scene: "kpop",
-    title: "Example announced release",
-    comebackDate: "2026-10-18",
-    type: "singleAlbum",
-    status: "announced",
-    coverUrl: "",
-    sourceUrl: "",
-    platformLinks: {},
-    notes: "Use source links to keep dates trustworthy instead of guessing."
+    aliases: ["태연"],
+    sources: [
+      { id: "instagram", label: "Instagram", handle: "@taeyeon_ss", url: "https://www.instagram.com/taeyeon_ss/", kind: "official" },
+      { id: "spotify", label: "Spotify", url: "https://open.spotify.com/search/TAEYEON", kind: "search" },
+      { id: "youtube", label: "YouTube", url: "https://www.youtube.com/results?search_query=TAEYEON+official", kind: "search" }
+    ]
   }
 ];

@@ -1,20 +1,31 @@
 import {
   CalendarDays,
+  Database,
   Disc3,
   ExternalLink,
+  Globe2,
   Heart,
   Image,
+  Instagram,
+  Link,
   Loader2,
+  Music,
   Music2,
+  Newspaper,
   Plus,
+  Radio,
   RefreshCw,
   Search,
-  Trash2
+  Trash2,
+  Twitter,
+  Youtube
 } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { artists } from "./data/catalog";
-import type { Artist, MusicScene, Platform } from "./types/music";
+import { fetchMusicBrainzReleaseGroups, musicBrainzPauseMs } from "./services/musicBrainz";
+import { fetchRecentYoutubePosts, isYoutubeReady } from "./services/youtube";
+import type { ApiRelease, Artist, ArtistPost, ArtistSource, MusicScene, Platform, SourcePlatform } from "./types/music";
 import { buildPlatformSearchUrl, platformLabels } from "./utils/links";
 import { readStoredValue, readStringList, writeStoredValue, writeStringList } from "./utils/storage";
 
@@ -26,9 +37,9 @@ const scenes: Array<{ id: MusicScene; label: string; available: boolean }> = [
 ];
 
 const appViews = [
-  { id: "upcoming", label: "Upcoming" },
-  { id: "discography", label: "Discography" },
-  { id: "artists", label: "Artists" }
+  { id: "releases", label: "Releases" },
+  { id: "posts", label: "Posts" },
+  { id: "sources", label: "Sources" }
 ] as const;
 
 type AppView = (typeof appViews)[number]["id"];
@@ -39,48 +50,17 @@ type LocalPreferences = {
   activeView: AppView;
 };
 
-type MusicBrainzArtist = {
-  id: string;
-  name: string;
-  disambiguation?: string;
-};
-
-type MusicBrainzReleaseGroup = {
-  id: string;
-  title: string;
-  "first-release-date"?: string;
-  "primary-type"?: string;
-  "secondary-types"?: string[];
-};
-
-type MusicBrainzArtistResponse = {
-  artists?: MusicBrainzArtist[];
-};
-
-type MusicBrainzReleaseGroupResponse = {
-  "release-groups"?: MusicBrainzReleaseGroup[];
-};
-
-type ApiRelease = {
-  id: string;
-  artistId: string;
-  artistName: string;
-  title: string;
-  releaseDate: string;
-  type: string;
-  sourceUrl: string;
-  coverUrl: string;
-  platformSearches: Record<Platform, string>;
-};
-
 const defaultPreferences: LocalPreferences = {
   scene: "kpop",
   selectedArtist: "all",
-  activeView: "upcoming"
+  activeView: "releases"
 };
 
-const musicBrainzBaseUrl = "https://musicbrainz.org/ws/2";
-const apiPauseMs = 1100;
+const apiSources = [
+  { label: "MusicBrainz", url: "https://musicbrainz.org/doc/MusicBrainz_API", note: "release metadata" },
+  { label: "Cover Art Archive", url: "https://coverartarchive.org/", note: "album artwork" },
+  { label: "YouTube Data API", url: "https://developers.google.com/youtube/v3", note: "official posts when configured" }
+];
 
 function sleep(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -101,14 +81,7 @@ function formatDate(date: string) {
     month: "short",
     day: "numeric",
     year: "numeric"
-  }).format(new Date(`${date}T00:00:00`));
-}
-
-function normalizeDate(date?: string) {
-  if (!date) return "";
-  if (/^\d{4}$/.test(date)) return `${date}-01-01`;
-  if (/^\d{4}-\d{2}$/.test(date)) return `${date}-01`;
-  return date;
+  }).format(new Date(`${date.slice(0, 10)}T00:00:00`));
 }
 
 function isUpcoming(date: string) {
@@ -117,17 +90,8 @@ function isUpcoming(date: string) {
   return new Date(`${date}T00:00:00`).getTime() >= today.getTime();
 }
 
-function getPlatformSearches(artistName: string, title: string): Record<Platform, string> {
-  return {
-    spotify: buildPlatformSearchUrl("spotify", artistName, title),
-    youtube: buildPlatformSearchUrl("youtube", artistName, title),
-    appleMusic: buildPlatformSearchUrl("appleMusic", artistName, title),
-    melon: buildPlatformSearchUrl("melon", artistName, title)
-  };
-}
-
 function getValidatedView(value: unknown): AppView {
-  return appViews.some((view) => view.id === value) ? (value as AppView) : "upcoming";
+  return appViews.some((view) => view.id === value) ? (value as AppView) : "releases";
 }
 
 function getInitialPreferences() {
@@ -139,51 +103,39 @@ function getInitialPreferences() {
   };
 }
 
-async function searchMusicBrainzArtist(artistName: string) {
-  const params = new URLSearchParams({
-    query: `artist:"${artistName}"`,
-    fmt: "json",
-    limit: "1"
-  });
-
-  const response = await fetch(`${musicBrainzBaseUrl}/artist?${params}`);
-  if (!response.ok) throw new Error(`Could not search ${artistName}`);
-
-  const data = (await response.json()) as MusicBrainzArtistResponse;
-  return data.artists?.[0];
+function getSourceIcon(source: SourcePlatform | Platform) {
+  switch (source) {
+    case "youtube":
+      return <Youtube size={17} />;
+    case "instagram":
+      return <Instagram size={17} />;
+    case "x":
+      return <Twitter size={17} />;
+    case "spotify":
+      return <Music2 size={17} />;
+    case "appleMusic":
+      return <Music size={17} />;
+    case "melon":
+      return <Radio size={17} />;
+    case "musicBrainz":
+      return <Database size={17} />;
+    case "coverArtArchive":
+      return <Image size={17} />;
+    case "website":
+      return <Globe2 size={17} />;
+    case "news":
+      return <Newspaper size={17} />;
+    default:
+      return <Link size={17} />;
+  }
 }
 
-async function fetchReleaseGroups(artist: Artist, mbid: string) {
-  const params = new URLSearchParams({
-    artist: mbid,
-    fmt: "json",
-    limit: "100"
-  });
-
-  const response = await fetch(`${musicBrainzBaseUrl}/release-group?${params}`);
-  if (!response.ok) throw new Error(`Could not load releases for ${artist.name}`);
-
-  const data = (await response.json()) as MusicBrainzReleaseGroupResponse;
-  return (data["release-groups"] ?? [])
-    .map((group): ApiRelease | null => {
-      const releaseDate = normalizeDate(group["first-release-date"]);
-      if (!releaseDate) return null;
-
-      const type = [group["primary-type"], ...(group["secondary-types"] ?? [])].filter(Boolean).join(" / ") || "Release";
-
-      return {
-        id: group.id,
-        artistId: artist.id,
-        artistName: artist.name,
-        title: group.title,
-        releaseDate,
-        type,
-        sourceUrl: `https://musicbrainz.org/release-group/${group.id}`,
-        coverUrl: `https://coverartarchive.org/release-group/${group.id}/front-250`,
-        platformSearches: getPlatformSearches(artist.name, group.title)
-      };
-    })
-    .filter((release): release is ApiRelease => Boolean(release));
+function getArtistFallbackSources(artist: Artist): ArtistSource[] {
+  return [
+    { id: "youtube", label: "YouTube", url: buildPlatformSearchUrl("youtube", artist.name, "official"), kind: "search" },
+    { id: "spotify", label: "Spotify", url: buildPlatformSearchUrl("spotify", artist.name, ""), kind: "search" },
+    { id: "appleMusic", label: "Apple Music", url: buildPlatformSearchUrl("appleMusic", artist.name, ""), kind: "search" }
+  ];
 }
 
 export default function App() {
@@ -198,6 +150,7 @@ export default function App() {
   const [watchlist, setWatchlist] = useState<string[]>(() => readStringList("watchlist", ["aespa", "ive", "iu"]));
   const [customArtists, setCustomArtists] = useState<Artist[]>(() => readStoredValue("customArtists", []));
   const [apiReleases, setApiReleases] = useState<ApiRelease[]>(() => readStoredValue("apiReleases", []));
+  const [artistPosts, setArtistPosts] = useState<ArtistPost[]>(() => readStoredValue("artistPosts", []));
   const [lastRefreshed, setLastRefreshed] = useState(() => readStoredValue("lastRefreshed", ""));
   const [loading, setLoading] = useState(false);
   const [dataMessage, setDataMessage] = useState("");
@@ -209,6 +162,10 @@ export default function App() {
   const watchedArtists = useMemo(
     () => sceneArtists.filter((artist) => watchlist.includes(artist.id)),
     [sceneArtists, watchlist]
+  );
+  const activeArtist = useMemo(
+    () => sceneArtists.find((artist) => artist.id === selectedArtist),
+    [sceneArtists, selectedArtist]
   );
 
   useEffect(() => {
@@ -222,6 +179,10 @@ export default function App() {
   useEffect(() => {
     writeStoredValue("apiReleases", apiReleases);
   }, [apiReleases]);
+
+  useEffect(() => {
+    writeStoredValue("artistPosts", artistPosts);
+  }, [artistPosts]);
 
   useEffect(() => {
     writeStoredValue("lastRefreshed", lastRefreshed);
@@ -252,17 +213,22 @@ export default function App() {
     );
   }, [artistQuery, sceneArtists]);
 
+  const artistsInFocus = useMemo(() => {
+    if (activeArtist) return [activeArtist];
+    return watchedArtists;
+  }, [activeArtist, watchedArtists]);
+
   const filteredReleases = useMemo(() => {
+    const artistIds = new Set(artistsInFocus.map((artist) => artist.id));
     const query = releaseQuery.trim().toLowerCase();
 
     return apiReleases
-      .filter((release) => release.artistId === selectedArtist || selectedArtist === "all")
-      .filter((release) => (watchlist.includes(release.artistId) ? true : selectedArtist !== "all"))
+      .filter((release) => artistIds.has(release.artistId))
       .filter((release) => {
         if (!query) return true;
         return `${release.artistName} ${release.title} ${release.type}`.toLowerCase().includes(query);
       });
-  }, [apiReleases, releaseQuery, selectedArtist, watchlist]);
+  }, [apiReleases, artistsInFocus, releaseQuery]);
 
   const upcomingReleases = useMemo(
     () => filteredReleases.filter((release) => isUpcoming(release.releaseDate)).sort((a, b) => a.releaseDate.localeCompare(b.releaseDate)),
@@ -274,8 +240,13 @@ export default function App() {
     [filteredReleases]
   );
 
+  const focusedPosts = useMemo(() => {
+    const artistIds = new Set(artistsInFocus.map((artist) => artist.id));
+    return artistPosts.filter((post) => artistIds.has(post.artistId)).sort((a, b) => b.date.localeCompare(a.date));
+  }, [artistPosts, artistsInFocus]);
+
   async function refreshArtistData() {
-    const artistsToRefresh = selectedArtist === "all" ? watchedArtists : sceneArtists.filter((artist) => artist.id === selectedArtist);
+    const artistsToRefresh = artistsInFocus.length > 0 ? artistsInFocus : watchedArtists;
 
     if (artistsToRefresh.length === 0) {
       setDataMessage("Save at least one artist first.");
@@ -283,36 +254,45 @@ export default function App() {
     }
 
     setLoading(true);
-    setDataMessage("Refreshing from MusicBrainz...");
+    setDataMessage("Refreshing public metadata...");
 
     try {
       const releases: ApiRelease[] = [];
+      const posts: ArtistPost[] = [];
       const failedArtists: string[] = [];
 
       for (const artist of artistsToRefresh) {
-        const match = await searchMusicBrainzArtist(artist.name);
-        if (!match) {
+        try {
+          releases.push(...(await fetchMusicBrainzReleaseGroups(artist)));
+          if (isYoutubeReady(artist)) {
+            posts.push(...(await fetchRecentYoutubePosts(artist)));
+          }
+        } catch {
           failedArtists.push(artist.name);
-          await sleep(apiPauseMs);
-          continue;
         }
-
-        const artistReleases = await fetchReleaseGroups(artist, match.id);
-        releases.push(...artistReleases);
-        await sleep(apiPauseMs);
+        await sleep(musicBrainzPauseMs);
       }
 
       setApiReleases((current) => {
-        const retained = current.filter((release) => !artistsToRefresh.some((artist) => artist.id === release.artistId));
+        const refreshedIds = new Set(artistsToRefresh.map((artist) => artist.id));
+        const retained = current.filter((release) => !refreshedIds.has(release.artistId));
         const merged = [...retained, ...releases];
         const uniqueById = new Map(merged.map((release) => [`${release.artistId}-${release.id}`, release]));
         return [...uniqueById.values()];
       });
+
+      setArtistPosts((current) => {
+        const refreshedIds = new Set(posts.map((post) => post.artistId));
+        const retained = current.filter((post) => !refreshedIds.has(post.artistId));
+        const uniqueById = new Map([...retained, ...posts].map((post) => [`${post.artistId}-${post.id}`, post]));
+        return [...uniqueById.values()];
+      });
+
       setLastRefreshed(new Date().toISOString());
       setDataMessage(
         failedArtists.length > 0
-          ? `Updated, but could not match: ${failedArtists.join(", ")}.`
-          : "Updated from MusicBrainz."
+          ? `Updated what I could. Could not refresh: ${failedArtists.join(", ")}.`
+          : "Updated from connected public sources."
       );
     } catch (error) {
       setDataMessage(error instanceof Error ? error.message : "Could not refresh data right now.");
@@ -341,6 +321,7 @@ export default function App() {
 
     setCustomArtists((current) => [...current, artist]);
     setWatchlist((current) => [...new Set([...current, artist.id])]);
+    setSelectedArtist(artist.id);
     setNewArtistName("");
     setNewArtistAliases("");
   }
@@ -349,19 +330,41 @@ export default function App() {
     setCustomArtists((current) => current.filter((artist) => artist.id !== artistId));
     setWatchlist((current) => current.filter((id) => id !== artistId));
     setApiReleases((current) => current.filter((release) => release.artistId !== artistId));
+    setArtistPosts((current) => current.filter((post) => post.artistId !== artistId));
+    if (selectedArtist === artistId) setSelectedArtist("all");
+  }
+
+  function renderSourceLink(source: ArtistSource) {
+    return (
+      <a className="icon-link" href={source.url} target="_blank" rel="noreferrer" title={source.label} key={`${source.id}-${source.url}`}>
+        {getSourceIcon(source.id)}
+        <span className="sr-only">{source.label}</span>
+      </a>
+    );
+  }
+
+  function renderPlatformLink(platform: Platform, url: string) {
+    return (
+      <a className="icon-link" href={url} target="_blank" rel="noreferrer" title={platformLabels[platform]} key={platform}>
+        {getSourceIcon(platform)}
+        <span className="sr-only">{platformLabels[platform]}</span>
+      </a>
+    );
   }
 
   function renderReleaseCard(release: ApiRelease) {
     return (
       <article className="release-card with-cover" key={`${release.artistId}-${release.id}`}>
         <div className="cover-frame">
-          <img
-            src={release.coverUrl}
-            alt={`${release.title} cover`}
-            onError={(event) => {
-              event.currentTarget.style.display = "none";
-            }}
-          />
+          {release.cover ? (
+            <img
+              src={release.cover.imageUrl}
+              alt={`${release.title} cover`}
+              onError={(event) => {
+                event.currentTarget.style.display = "none";
+              }}
+            />
+          ) : null}
           <div className="cover-placeholder">
             <Image size={24} />
             <span>{release.artistName.slice(0, 2).toUpperCase()}</span>
@@ -375,19 +378,37 @@ export default function App() {
             </div>
             <span>{release.type}</span>
           </div>
-          <p className="artist-name">{release.artistName}</p>
-          <div className="platform-links">
-            {(Object.entries(release.platformSearches) as Array<[Platform, string]>).map(([platform, url]) => (
-              <a href={url} target="_blank" rel="noreferrer" key={platform}>
-                {platformLabels[platform]}
-              </a>
-            ))}
-            <a href={release.sourceUrl} target="_blank" rel="noreferrer">
-              <ExternalLink size={14} />
-              MusicBrainz
+          <button className="artist-name as-button" type="button" onClick={() => setSelectedArtist(release.artistId)}>
+            {release.artistName}
+          </button>
+          <div className="platform-links icon-only">
+            {(Object.entries(release.platformSearches) as Array<[Platform, string]>).map(([platform, url]) =>
+              renderPlatformLink(platform, url)
+            )}
+            <a className="icon-link source-link" href={release.source.url} target="_blank" rel="noreferrer" title={release.source.label}>
+              {getSourceIcon("musicBrainz")}
+              <span className="sr-only">{release.source.label}</span>
             </a>
           </div>
         </div>
+      </article>
+    );
+  }
+
+  function renderPostCard(post: ArtistPost) {
+    return (
+      <article className="post-card" key={`${post.artistId}-${post.id}`}>
+        <a href={post.url} target="_blank" rel="noreferrer" title={post.title}>
+          <div className="post-thumb">
+            {post.thumbnailUrl ? <img src={post.thumbnailUrl} alt="" /> : <Youtube size={24} />}
+          </div>
+          <div>
+            <p>{formatDate(post.date)}</p>
+            <h3>{post.title}</h3>
+            <small>{post.artistName} via {post.source.label}</small>
+          </div>
+          <ExternalLink size={16} />
+        </a>
       </article>
     );
   }
@@ -437,18 +458,30 @@ export default function App() {
           </button>
         </form>
 
+        <button className={`all-artists-button ${selectedArtist === "all" ? "active" : ""}`} type="button" onClick={() => setSelectedArtist("all")}>
+          All saved artists
+        </button>
+
         <section className="artist-list" aria-label="Artists">
           {matchingArtists.map((artist) => {
             const saved = watchlist.includes(artist.id);
             const isCustom = customArtistIds.has(artist.id);
 
             return (
-              <div className="artist-row" key={artist.id}>
-                <button type="button" onClick={() => toggleWatchlist(artist.id)} aria-pressed={saved}>
+              <div className={`artist-row ${selectedArtist === artist.id ? "selected" : ""}`} key={artist.id}>
+                <button type="button" onClick={() => setSelectedArtist(artist.id)}>
                   <span>
                     <strong>{artist.name}</strong>
                     <small>{artist.aliases?.[0] ?? (isCustom ? "Saved locally" : "K-pop artist")}</small>
                   </span>
+                </button>
+                <button
+                  type="button"
+                  className="heart-button"
+                  onClick={() => toggleWatchlist(artist.id)}
+                  title={saved ? `Unsave ${artist.name}` : `Save ${artist.name}`}
+                  aria-pressed={saved}
+                >
                   <Heart size={18} className={saved ? "saved" : ""} fill={saved ? "currentColor" : "none"} />
                 </button>
                 {isCustom ? (
@@ -468,14 +501,18 @@ export default function App() {
       </aside>
 
       <section className="content">
-        <header className="topbar">
+        <header className="artist-hero">
           <div>
-            <p className="eyebrow">API-backed, local watchlist</p>
-            <h2>Upcoming comebacks and discography from saved artists</h2>
+            <p className="eyebrow">{activeArtist ? "Artist page" : "Saved artist feed"}</p>
+            <h2>{activeArtist?.name ?? "All saved artists"}</h2>
             <p className="topbar-note">
-              Save artists, refresh, and K-tracker pulls release-group data from MusicBrainz. Spotify, Apple Music,
-              YouTube, and Melon buttons open searchable links for each release.
+              {activeArtist
+                ? `${activeArtist.aliases?.join(", ") || "Official sources and public release metadata"}`
+                : "Recent releases and source links from artists you saved on this PC."}
             </p>
+            <div className="source-strip">
+              {(activeArtist?.sources ?? []).map(renderSourceLink)}
+            </div>
           </div>
           <button className="sync-button" type="button" onClick={() => void refreshArtistData()} disabled={loading}>
             {loading ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />}
@@ -503,11 +540,11 @@ export default function App() {
               <input
                 value={releaseQuery}
                 onChange={(event) => setReleaseQuery(event.target.value)}
-                placeholder="Search artist or release"
+                placeholder="Search release"
               />
             </label>
             <select value={selectedArtist} onChange={(event) => setSelectedArtist(event.target.value)}>
-              <option value="all">Saved artists</option>
+              <option value="all">All saved artists</option>
               {sceneArtists.map((artist) => (
                 <option value={artist.id} key={artist.id}>
                   {artist.name}
@@ -516,12 +553,12 @@ export default function App() {
             </select>
           </div>
           <p className="data-status">
-            {dataMessage || (lastRefreshed ? `Last refreshed ${new Date(lastRefreshed).toLocaleString()}` : "Refresh to load API data.")}
+            {dataMessage || (lastRefreshed ? `Last refreshed ${new Date(lastRefreshed).toLocaleString()}` : "Refresh to load public data.")}
           </p>
         </section>
 
-        {activeView === "upcoming" ? (
-          <section className="feed-section" aria-label="Upcoming comebacks">
+        {activeView === "releases" ? (
+          <section className="feed-section" aria-label="Releases">
             <div className="section-heading">
               <CalendarDays size={18} />
               <h2>Upcoming</h2>
@@ -531,19 +568,15 @@ export default function App() {
                 upcomingReleases.map(renderReleaseCard)
               ) : (
                 <article className="empty-card">
-                  <h3>No upcoming releases found</h3>
+                  <h3>No upcoming release dates found</h3>
                   <p>
-                    MusicBrainz may not have future comeback dates for your saved artists yet. Refresh later, or use
-                    Discography to see current releases.
+                    Future K-pop announcements are often posted first on official socials, then databases catch up.
+                    Sources are still linked below so you can jump straight to the official pages.
                   </p>
                 </article>
               )}
             </div>
-          </section>
-        ) : null}
 
-        {activeView === "discography" ? (
-          <section className="feed-section" aria-label="Discography">
             <div className="section-heading">
               <Disc3 size={18} />
               <h2>Discography</h2>
@@ -553,7 +586,7 @@ export default function App() {
                 discography.map(renderReleaseCard)
               ) : (
                 <article className="empty-card">
-                  <h3>No discography loaded yet</h3>
+                  <h3>No release data loaded yet</h3>
                   <p>Refresh your saved artists to pull release groups from MusicBrainz.</p>
                 </article>
               )}
@@ -561,33 +594,70 @@ export default function App() {
           </section>
         ) : null}
 
-        {activeView === "artists" ? (
-          <section className="feed-section" aria-label="Saved artists">
+        {activeView === "posts" ? (
+          <section className="feed-section" aria-label="Recent posts">
             <div className="section-heading">
-              <Heart size={18} />
-              <h2>Saved artists</h2>
+              <Youtube size={18} />
+              <h2>Recent official posts</h2>
             </div>
-            <div className="artist-summary-grid">
-              {watchedArtists.map((artist) => (
-                <article className="artist-summary-card" key={artist.id}>
-                  <h3>{artist.name}</h3>
-                  <p>{artist.aliases?.join(", ") || "No aliases saved"}</p>
-                  <div className="platform-links">
-                    <a href={buildPlatformSearchUrl("spotify", artist.name, "")} target="_blank" rel="noreferrer">
-                      Spotify
-                    </a>
-                    <a href={buildPlatformSearchUrl("youtube", artist.name, "")} target="_blank" rel="noreferrer">
-                      YouTube
-                    </a>
-                    <a href={buildPlatformSearchUrl("appleMusic", artist.name, "")} target="_blank" rel="noreferrer">
-                      Apple Music
-                    </a>
-                  </div>
+            <div className="post-list">
+              {focusedPosts.length > 0 ? (
+                focusedPosts.map(renderPostCard)
+              ) : (
+                <article className="empty-card">
+                  <h3>No official posts connected yet</h3>
+                  <p>
+                    The app is ready for the YouTube Data API, but it needs a local API key and official channel IDs before
+                    it can fetch recent uploads safely. X and Instagram links stay clickable, but feeds need approved APIs.
+                  </p>
                 </article>
-              ))}
+              )}
             </div>
           </section>
         ) : null}
+
+        {activeView === "sources" ? (
+          <section className="feed-section" aria-label="Sources">
+            <div className="section-heading">
+              <Globe2 size={18} />
+              <h2>Artist sources</h2>
+            </div>
+            <div className="source-card-grid">
+              {artistsInFocus.map((artist) => {
+                const sourceLinks = artist.sources?.length ? artist.sources : getArtistFallbackSources(artist);
+                return (
+                  <article className="artist-summary-card" key={artist.id}>
+                    <div>
+                      <h3>{artist.name}</h3>
+                      <p>{artist.aliases?.join(", ") || "No aliases saved"}</p>
+                    </div>
+                    <div className="source-list">
+                      {sourceLinks.map((source) => (
+                        <a href={source.url} target="_blank" rel="noreferrer" key={`${artist.id}-${source.id}-${source.url}`}>
+                          {getSourceIcon(source.id)}
+                          <span>
+                            <strong>{source.label}</strong>
+                            <small>{source.handle ?? source.kind}</small>
+                          </span>
+                          <ExternalLink size={15} />
+                        </a>
+                      ))}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
+
+        <footer className="source-credit-bar" aria-label="Data source credits">
+          <span>Powered by public sources</span>
+          {apiSources.map((source) => (
+            <a href={source.url} target="_blank" rel="noreferrer" key={source.label} title={source.note}>
+              {source.label}
+            </a>
+          ))}
+        </footer>
       </section>
     </main>
   );

@@ -277,6 +277,61 @@ h1 {
   background: #e7c46b;
 }
 
+.artist-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid rgba(22, 32, 42, 0.1);
+}
+
+.artist-hero h2 {
+  margin-bottom: 0;
+  font-size: clamp(1.85rem, 1.1rem + 2vw, 3rem);
+}
+
+.source-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.all-artists-button {
+  min-height: 42px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  color: #cfe3e5;
+  font-weight: 800;
+  text-align: left;
+  background: #22303d;
+  cursor: pointer;
+}
+
+.all-artists-button.active {
+  color: #16202a;
+  background: #9ed8d3;
+}
+
+.artist-row.selected {
+  outline: 2px solid #9ed8d3;
+  outline-offset: 0;
+}
+
+.heart-button {
+  display: grid;
+  place-items: center;
+  flex: 0 0 38px;
+  width: 38px;
+  min-height: 38px;
+  border: 0;
+  color: #f9faf7;
+  background: transparent;
+  cursor: pointer;
+}
+
 .stats-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -708,6 +763,56 @@ h1 {
   background: #f0eadf;
 }
 
+.icon-link {
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  color: #16202a;
+  text-decoration: none;
+  background: #f0eadf;
+}
+
+.icon-link:hover,
+.source-list a:hover,
+.post-card a:hover {
+  color: #0f5f5b;
+  background: #d9f0eb;
+}
+
+.platform-links.icon-only a {
+  width: 38px;
+  height: 38px;
+  justify-content: center;
+  padding: 0;
+}
+
+.source-link {
+  color: #1c5b58;
+  background: #d9f0eb;
+}
+
+.sr-only {
+  position: absolute;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  margin: -1px;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.as-button {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
 .news-section {
   display: grid;
   gap: 12px;
@@ -735,6 +840,97 @@ h1 {
 
 .artist-summary-card p {
   color: #657586;
+}
+
+.source-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.source-list {
+  display: grid;
+  gap: 8px;
+}
+
+.source-list a {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 46px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: #16202a;
+  text-decoration: none;
+  background: #f0eadf;
+}
+
+.source-list small {
+  display: block;
+  margin-top: 2px;
+  color: #657586;
+}
+
+.post-list {
+  display: grid;
+  gap: 10px;
+}
+
+.post-card a {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-height: 92px;
+  padding: 10px;
+  border: 1px solid rgba(22, 32, 42, 0.09);
+  border-radius: 8px;
+  color: inherit;
+  text-decoration: none;
+  background: #ffffff;
+}
+
+.post-thumb {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  aspect-ratio: 16 / 10;
+  border-radius: 8px;
+  color: #e7c46b;
+  background: #16202a;
+}
+
+.post-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.post-card h3,
+.post-card p {
+  margin-bottom: 4px;
+}
+
+.post-card small {
+  color: #657586;
+}
+
+.source-credit-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding-top: 12px;
+  border-top: 1px solid rgba(22, 32, 42, 0.1);
+  color: #657586;
+  font-size: 0.82rem;
+}
+
+.source-credit-bar a {
+  color: #1c5b58;
+  font-weight: 800;
+  text-decoration: none;
 }
 
 .spin {
@@ -844,7 +1040,8 @@ h1 {
   .today-grid,
   .release-grid,
   .comeback-grid,
-  .artist-summary-grid {
+  .artist-summary-grid,
+  .source-card-grid {
     grid-template-columns: 1fr;
   }
 
@@ -872,6 +1069,11 @@ h1 {
   }
 
   .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .artist-hero {
     align-items: flex-start;
     flex-direction: column;
   }
@@ -916,5 +1118,13 @@ h1 {
   .news-row {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .post-card a {
+    grid-template-columns: 1fr auto;
+  }
+
+  .post-thumb {
+    grid-column: 1 / -1;
   }
 }

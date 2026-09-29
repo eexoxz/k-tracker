@@ -2,13 +2,22 @@ export type MusicScene = "kpop" | "mandopop" | "jpop" | "english_pop";
 
 export type Platform = "spotify" | "youtube" | "appleMusic" | "melon";
 
-export type ReleaseType = "single" | "album" | "ep" | "ost" | "preRelease";
+export type SourcePlatform =
+  | Platform
+  | "musicBrainz"
+  | "coverArtArchive"
+  | "instagram"
+  | "x"
+  | "website"
+  | "news";
 
-export type ComebackStatus = "rumored" | "announced" | "confirmed" | "released";
-
-export type ComebackType = ReleaseType | "debut" | "fullAlbum" | "miniAlbum" | "singleAlbum" | "japaneseRelease";
-
-export type PlatformLinks = Partial<Record<Platform, string>>;
+export type ArtistSource = {
+  id: SourcePlatform;
+  label: string;
+  url: string;
+  handle?: string;
+  kind: "official" | "database" | "search" | "news";
+};
 
 export type Artist = {
   id: string;
@@ -16,45 +25,37 @@ export type Artist = {
   scene: MusicScene;
   aliases?: string[];
   group?: string;
+  musicBrainzId?: string;
+  youtubeChannelId?: string;
+  sources?: ArtistSource[];
 };
 
-export type Release = {
+export type SourceCredit = {
+  label: string;
+  url: string;
+  kind: "metadata" | "cover" | "official" | "search" | "news";
+};
+
+export type ApiRelease = {
   id: string;
   artistId: string;
   artistName: string;
   title: string;
-  scene: MusicScene;
   releaseDate: string;
-  type: ReleaseType;
-  platformHints: Platform[];
-  summary: string;
+  type: string;
+  source: SourceCredit;
+  cover?: SourceCredit & { imageUrl: string };
+  platformSearches: Record<Platform, string>;
 };
 
-export type NewsItem = {
+export type ArtistPost = {
   id: string;
-  artistId?: string;
+  artistId: string;
   artistName: string;
-  scene: MusicScene;
   title: string;
   date: string;
-  source: string;
+  platform: "youtube";
   url: string;
+  thumbnailUrl?: string;
+  source: SourceCredit;
 };
-
-export type Comeback = {
-  id: string;
-  artistId: string;
-  artistName: string;
-  scene: MusicScene;
-  title: string;
-  comebackDate: string;
-  comebackTime?: string;
-  type: ComebackType;
-  status: ComebackStatus;
-  coverUrl?: string;
-  sourceUrl?: string;
-  platformLinks: PlatformLinks;
-  notes?: string;
-};
-
-export type DateFilter = "all" | "week" | "month";
