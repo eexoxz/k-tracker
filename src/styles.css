@@ -288,7 +288,77 @@ h1 {
 
 .artist-hero h2 {
   margin-bottom: 0;
-  font-size: clamp(1.85rem, 1.1rem + 2vw, 3rem);
+  font-size: 2rem;
+  overflow-wrap: anywhere;
+}
+
+.artist-hero > div {
+  min-width: 0;
+}
+
+.artist-search-results,
+.artist-members-section {
+  display: grid;
+  gap: 8px;
+}
+
+.artist-search-results h2 {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.search-status {
+  margin: 0;
+  color: #b8c9d0;
+  font-size: 0.8rem;
+}
+
+.artist-members-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 8px;
+}
+
+.artist-members-grid .member-row {
+  background: #fff;
+  border: 1px solid rgba(22, 32, 42, 0.09);
+}
+
+.artist-row strong,
+.artist-row small,
+.member-row,
+.source-list,
+.release-header h3,
+.data-status {
+  overflow-wrap: anywhere;
+}
+
+.member-row .platform-links {
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.artist-members-grid .member-row {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.artist-members-grid .member-row .platform-links {
+  justify-content: flex-start;
+}
+
+.more-releases {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  justify-self: start;
+  min-height: 42px;
+  padding: 8px 14px;
+  border: 1px solid #b7c5c9;
+  border-radius: 8px;
+  background: #fff;
+  color: #16202a;
+  cursor: pointer;
 }
 
 .source-strip {

@@ -50,7 +50,7 @@ export const artists: Artist[] = [
     name: "aespa",
     scene: "kpop",
     aliases: ["에스파"],
-    musicBrainzId: "2e33d91b-2421-470a-9b47-e475ed5e45c8",
+    musicBrainzId: "b51c672b-85e0-48fe-8648-470a2422229f",
     sources: [
       { id: "instagram", label: "Instagram", handle: "@aespa_official", url: "https://www.instagram.com/aespa_official/", kind: "official" },
       { id: "x", label: "X", handle: "@aespa_Official", url: "https://x.com/aespa_Official", kind: "official" },

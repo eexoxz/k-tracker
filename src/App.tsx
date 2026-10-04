@@ -1,5 +1,6 @@
 import {
   CalendarDays,
+  ChevronDown,
   Database,
   Disc3,
   ExternalLink,
@@ -12,7 +13,6 @@ import {
   Music,
   Music2,
   Newspaper,
-  Plus,
   Radio,
   RefreshCw,
   Search,
@@ -22,15 +22,18 @@ import {
   Users,
   Youtube
 } from "lucide-react";
-import type { FormEvent } from "react";
+import { isTauri } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { artists } from "./data/catalog";
 import { discoverySources, fallbackCalendarEvents, getArtistNewsSources, sourceCredits } from "./data/publicSources";
 import { fetchKpopCalendarEvents } from "./services/kpopCalendar";
-import { fetchMusicBrainzReleaseGroups, musicBrainzPauseMs } from "./services/musicBrainz";
+import { fetchArtistProfile, getArtistSources, matchesArtistName } from "./services/artistProfiles";
+import { fetchMusicBrainzReleaseGroups, searchMusicBrainzArtists } from "./services/musicBrainz";
 import { fetchRecentYoutubePosts, isYoutubeReady } from "./services/youtube";
-import type { ApiRelease, Artist, ArtistPost, ArtistSource, KpopCalendarEvent, MusicScene, Platform, SourcePlatform } from "./types/music";
-import { buildPlatformSearchUrl, platformLabels } from "./utils/links";
+import type { ApiRelease, Artist, ArtistMember, ArtistPost, ArtistProfile, ArtistSource, KpopCalendarEvent, MusicScene, Platform, SourcePlatform } from "./types/music";
+import { platformLabels } from "./utils/links";
 import { readStoredValue, readStringList, writeStoredValue, writeStringList } from "./utils/storage";
 
 const scenes: Array<{ id: MusicScene; label: string; available: boolean }> = [
@@ -67,20 +70,6 @@ const apiSources = [
   { label: "Cover Art Archive", url: "https://coverartarchive.org/", note: "album artwork" },
   { label: "YouTube Data API", url: "https://developers.google.com/youtube/v3", note: "official posts when configured" }
 ];
-
-function sleep(ms: number) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
-function createArtistId(name: string) {
-  const slug = name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-
-  return `local-${slug || "artist"}-${Date.now()}`;
-}
 
 function formatDate(date: string) {
   return new Intl.DateTimeFormat("en", {
@@ -138,14 +127,6 @@ function getSourceIcon(source: SourcePlatform | Platform) {
   }
 }
 
-function getArtistFallbackSources(artist: Artist): ArtistSource[] {
-  return [
-    { id: "youtube", label: "YouTube", url: buildPlatformSearchUrl("youtube", artist.name, "official"), kind: "search" },
-    { id: "spotify", label: "Spotify", url: buildPlatformSearchUrl("spotify", artist.name, ""), kind: "search" },
-    { id: "appleMusic", label: "Apple Music", url: buildPlatformSearchUrl("appleMusic", artist.name, ""), kind: "search" }
-  ];
-}
-
 export default function App() {
   const initialPreferences = useMemo(getInitialPreferences, []);
   const [scene, setScene] = useState<MusicScene>(initialPreferences.scene);
@@ -153,8 +134,14 @@ export default function App() {
   const [activeView, setActiveView] = useState<AppView>(initialPreferences.activeView);
   const [artistQuery, setArtistQuery] = useState("");
   const [releaseQuery, setReleaseQuery] = useState("");
-  const [newArtistName, setNewArtistName] = useState("");
-  const [newArtistAliases, setNewArtistAliases] = useState("");
+  const [releaseLimit, setReleaseLimit] = useState(12);
+  const [onlineArtists, setOnlineArtists] = useState<Artist[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchMessage, setSearchMessage] = useState("");
+  const [artistProfiles, setArtistProfiles] = useState<Record<string, ArtistProfile>>(() => readStoredValue("artistProfiles", {}));
+  const [profileLoadingId, setProfileLoadingId] = useState("");
+  const [profileMessages, setProfileMessages] = useState<Record<string, string>>({});
+  const [profileRefresh, setProfileRefresh] = useState(0);
   const [watchlist, setWatchlist] = useState<string[]>(() => readStringList("watchlist", ["aespa", "ive", "iu"]));
   const [customArtists, setCustomArtists] = useState<Artist[]>(() => readStoredValue("customArtists", []));
   const [calendarEvents, setCalendarEvents] = useState<KpopCalendarEvent[]>(() =>
@@ -166,8 +153,11 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [dataMessage, setDataMessage] = useState("");
   const didAutoRefresh = useRef(false);
+  const profilesRef = useRef(artistProfiles);
+  const handledProfileRefresh = useRef(0);
+  profilesRef.current = artistProfiles;
 
-  const allArtists = useMemo(() => [...artists, ...customArtists], [customArtists]);
+  const allArtists = useMemo(() => [...artists, ...customArtists].map((artist) => artistProfiles[artist.id] ?? artist), [customArtists, artistProfiles]);
   const sceneArtists = useMemo(() => allArtists.filter((artist) => artist.scene === scene), [allArtists, scene]);
   const customArtistIds = useMemo(() => new Set(customArtists.map((artist) => artist.id)), [customArtists]);
   const watchedArtists = useMemo(
@@ -183,9 +173,87 @@ export default function App() {
     writeStringList("watchlist", watchlist);
   }, [watchlist]);
 
+  useEffect(() => { setReleaseLimit(12); }, [selectedArtist, releaseQuery]);
+
   useEffect(() => {
     writeStoredValue("customArtists", customArtists);
   }, [customArtists]);
+
+  useEffect(() => {
+    writeStoredValue("artistProfiles", artistProfiles);
+  }, [artistProfiles]);
+
+  useEffect(() => {
+    const query = artistQuery.trim();
+    setOnlineArtists([]);
+    setSearchMessage("");
+    if (query.length < 2) { setSearchLoading(false); return; }
+    const controller = new AbortController();
+    setSearchLoading(true);
+    const timer = window.setTimeout(() => {
+      void searchMusicBrainzArtists(query, controller.signal).then((results) => {
+        if (controller.signal.aborted) return;
+        setOnlineArtists(results.map((result) => ({
+          id: `mb-${result.id}`,
+          name: result.name,
+          scene,
+          musicBrainzId: result.id,
+          aliases: result.aliases?.map((alias) => alias.name),
+          artistType: result.type,
+          disambiguation: [result.disambiguation, result.country].filter(Boolean).join(" / ")
+        })));
+        if (!results.length) setSearchMessage("No artists found online.");
+      }).catch(() => {
+        if (!controller.signal.aborted) setSearchMessage("Artist search is unavailable. Try again shortly.");
+      }).finally(() => {
+        if (!controller.signal.aborted) setSearchLoading(false);
+      });
+    }, 450);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [artistQuery, scene]);
+
+  useEffect(() => {
+    setProfileLoadingId("");
+    if (selectedArtist === "all") { setProfileLoadingId(""); return; }
+    const artist = [...artists, ...customArtists].find((item) => item.id === selectedArtist);
+    if (!artist) return;
+    const cached = profilesRef.current[selectedArtist];
+    const force = profileRefresh !== handledProfileRefresh.current;
+    handledProfileRefresh.current = profileRefresh;
+    if (!force && cached?.membersComplete && Date.now() - Date.parse(cached.fetchedAt) < 86400000) return;
+    const controller = new AbortController();
+    setProfileLoadingId(selectedArtist);
+    setProfileMessages((current) => ({ ...current, [selectedArtist]: "Loading artist details..." }));
+    let releaseFailed = false;
+    void fetchArtistProfile(cached ?? artist, controller.signal, (profile) => {
+      if (!controller.signal.aborted) setArtistProfiles((current) => ({ ...current, [artist.id]: profile }));
+    }, async (profile) => {
+      try {
+        const releases = await fetchMusicBrainzReleaseGroups(profile, controller.signal);
+        if (!controller.signal.aborted) setApiReleases((current) => [
+          ...current.filter((release) => release.artistId !== artist.id), ...releases
+        ]);
+      } catch {
+        controller.signal.throwIfAborted();
+        releaseFailed = true;
+      }
+      setProfileMessages((current) => ({ ...current, [artist.id]: "Loading member links..." }));
+    }).then(() => {
+      if (releaseFailed && !controller.signal.aborted) setArtistProfiles((current) => ({
+        ...current, [artist.id]: { ...current[artist.id], fetchedAt: "" }
+      }));
+      if (!controller.signal.aborted) setProfileMessages((current) => ({
+        ...current, [artist.id]: releaseFailed ? "Artist links loaded. Releases could not refresh; try again shortly." : ""
+      }));
+    }).catch((error: unknown) => {
+      if (!controller.signal.aborted) setProfileMessages((current) => ({
+        ...current, [artist.id]: error instanceof Error ? error.message : "Artist details could not load. Refresh to retry."
+      }));
+    }).finally(() => {
+      if (!controller.signal.aborted) setProfileLoadingId("");
+    });
+    return () => controller.abort();
+  }, [selectedArtist, customArtists, profileRefresh]);
 
   useEffect(() => {
     writeStoredValue("calendarEvents", calendarEvents);
@@ -216,7 +284,8 @@ export default function App() {
   useEffect(() => {
     if (didAutoRefresh.current || (apiReleases.length > 0 && calendarEvents.length > 1)) return;
     didAutoRefresh.current = true;
-    void refreshArtistData();
+    if (selectedArtist === "all") void refreshArtistData();
+    else void fetchKpopCalendarEvents().then(setCalendarEvents).catch(() => undefined);
   }, [apiReleases.length, calendarEvents.length]);
 
   const matchingArtists = useMemo(() => {
@@ -270,18 +339,25 @@ export default function App() {
   const visibleCalendarEvents = useMemo(() => {
     const query = releaseQuery.trim().toLowerCase();
     return calendarEvents.filter((event) => {
+      if (activeArtist && !matchesArtistName(activeArtist, event.artistName)) return false;
       if (!query) return true;
       return `${event.artistName} ${event.title} ${event.type} ${event.description ?? ""}`.toLowerCase().includes(query);
     });
-  }, [calendarEvents, releaseQuery]);
+  }, [calendarEvents, releaseQuery, activeArtist]);
 
   const activeArtistNewsSources = useMemo(
     () => (activeArtist ? getArtistNewsSources(activeArtist) : discoverySources),
     [activeArtist]
   );
 
+  const upcomingCalendarEvents = visibleCalendarEvents.filter((event) =>
+    isUpcoming(event.date) && event.type !== "calendar" && artistsInFocus.some((artist) => matchesArtistName(artist, event.artistName))
+  );
+
   async function refreshArtistData() {
-    const artistsToRefresh = artistsInFocus.length > 0 ? artistsInFocus : watchedArtists;
+    if (loading) return;
+    if (activeArtist) setProfileRefresh((current) => current + 1);
+    const artistsToRefresh = activeArtist ? [] : watchedArtists;
 
     setLoading(true);
     setDataMessage("Refreshing public metadata...");
@@ -291,6 +367,7 @@ export default function App() {
       const releases: ApiRelease[] = [];
       const posts: ArtistPost[] = [];
       const failedArtists: string[] = [];
+      const refreshedIds = new Set<string>();
 
       try {
         const events = await fetchKpopCalendarEvents();
@@ -302,17 +379,16 @@ export default function App() {
       for (const artist of artistsToRefresh) {
         try {
           releases.push(...(await fetchMusicBrainzReleaseGroups(artist)));
+          refreshedIds.add(artist.id);
           if (isYoutubeReady(artist)) {
             posts.push(...(await fetchRecentYoutubePosts(artist)));
           }
         } catch {
           failedArtists.push(artist.name);
         }
-        await sleep(musicBrainzPauseMs);
       }
 
       setApiReleases((current) => {
-        const refreshedIds = new Set(artistsToRefresh.map((artist) => artist.id));
         const retained = current.filter((release) => !refreshedIds.has(release.artistId));
         const merged = [...retained, ...releases];
         const uniqueById = new Map(merged.map((release) => [`${release.artistId}-${release.id}`, release]));
@@ -347,23 +423,29 @@ export default function App() {
     );
   }
 
-  function addCustomArtist(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function openArtist(artist: Artist) {
+    const existing = sceneArtists.find((item) =>
+      artist.musicBrainzId && item.musicBrainzId ? item.musicBrainzId === artist.musicBrainzId : matchesArtistName(item, artist.name)
+    );
+    const target = existing ?? artist;
+    if (existing && !existing.musicBrainzId && artist.musicBrainzId) {
+      setArtistProfiles((current) => ({
+        ...current, [existing.id]: { ...existing, ...artist, id: existing.id, fetchedAt: "", membersComplete: false }
+      }));
+    }
+    if (!existing) setCustomArtists((current) => [...current, artist]);
+    setSelectedArtist(target.id);
+    setActiveView("releases");
+    setReleaseQuery("");
+    setArtistQuery("");
+  }
 
-    const name = newArtistName.trim();
-    if (!name) return;
-
-    const aliases = newArtistAliases
-      .split(",")
-      .map((alias) => alias.trim())
-      .filter(Boolean);
-    const artist = { id: createArtistId(name), name, scene, aliases };
-
-    setCustomArtists((current) => [...current, artist]);
-    setWatchlist((current) => [...new Set([...current, artist.id])]);
-    setSelectedArtist(artist.id);
-    setNewArtistName("");
-    setNewArtistAliases("");
+  function openMember(artist: Artist, member: ArtistMember) {
+    if (!member.musicBrainzId) return;
+    openArtist({
+      id: `mb-${member.musicBrainzId}`, name: member.name, aliases: member.aliases,
+      scene: artist.scene, musicBrainzId: member.musicBrainzId, sources: member.sources, group: artist.name
+    });
   }
 
   function removeCustomArtist(artistId: string) {
@@ -376,11 +458,23 @@ export default function App() {
 
   function renderSourceLink(source: ArtistSource) {
     return (
-      <a className="icon-link" href={source.url} target="_blank" rel="noreferrer" title={source.label} key={`${source.id}-${source.url}`}>
+      <a className="icon-link" href={source.url} target="_blank" rel="noreferrer" title={`${source.label}${source.attributionUrl ? " (via MusicBrainz)" : source.kind === "search" ? " (search)" : ""}`} key={`${source.id}-${source.url}`}>
         {getSourceIcon(source.id)}
         <span className="sr-only">{source.label}</span>
       </a>
     );
+  }
+
+  function handleExternalLink(event: ReactMouseEvent<HTMLElement>) {
+    if (!isTauri() || !(event.target instanceof Element)) return;
+    const anchor = event.target.closest<HTMLAnchorElement>("a[href]");
+    if (!anchor || !/^https?:\/\//i.test(anchor.href)) return;
+    event.preventDefault();
+    void openUrl(anchor.href).catch(() => {
+      const message = "The browser could not open this link. Please try again.";
+      if (activeArtist) setProfileMessages((current) => ({ ...current, [activeArtist.id]: message }));
+      else setDataMessage(message);
+    });
   }
 
   function renderPlatformLink(platform: Platform, url: string) {
@@ -400,6 +494,8 @@ export default function App() {
             <img
               src={release.cover.imageUrl}
               alt={`${release.title} cover`}
+              loading="lazy"
+              decoding="async"
               onError={(event) => {
                 event.currentTarget.style.display = "none";
               }}
@@ -454,9 +550,7 @@ export default function App() {
   }
 
   function renderCalendarEvent(event: KpopCalendarEvent) {
-    const matchingArtist = sceneArtists.find(
-      (artist) => artist.name.toLowerCase() === event.artistName.toLowerCase()
-    );
+    const matchingArtist = sceneArtists.find((artist) => matchesArtistName(artist, event.artistName));
 
     return (
       <article className="event-card" key={event.id}>
@@ -468,8 +562,7 @@ export default function App() {
             type="button"
             onClick={() => {
               if (matchingArtist) {
-                setSelectedArtist(matchingArtist.id);
-                setActiveView("releases");
+                openArtist(matchingArtist);
               } else {
                 setArtistQuery(event.artistName);
               }
@@ -512,7 +605,7 @@ export default function App() {
   }
 
   return (
-    <main className="app-shell">
+    <main className="app-shell" onClick={handleExternalLink}>
       <aside className="sidebar" aria-label="Artist watchlist">
         <div className="brand-block">
           <div className="brand-mark" aria-hidden="true">
@@ -541,20 +634,8 @@ export default function App() {
 
         <label className="search-box">
           <Search size={17} />
-          <input value={artistQuery} onChange={(event) => setArtistQuery(event.target.value)} placeholder="Find artist" />
+          <input value={artistQuery} onChange={(event) => setArtistQuery(event.target.value)} placeholder="Find any artist" aria-label="Find any artist" />
         </label>
-
-        <form className="add-artist-form" onSubmit={addCustomArtist}>
-          <input value={newArtistName} onChange={(event) => setNewArtistName(event.target.value)} placeholder="Add artist" />
-          <input
-            value={newArtistAliases}
-            onChange={(event) => setNewArtistAliases(event.target.value)}
-            placeholder="Aliases"
-          />
-          <button type="submit" title="Save artist">
-            <Plus size={17} />
-          </button>
-        </form>
 
         <button className={`all-artists-button ${selectedArtist === "all" ? "active" : ""}`} type="button" onClick={() => setSelectedArtist("all")}>
           All saved artists
@@ -567,7 +648,7 @@ export default function App() {
 
             return (
               <div className={`artist-row ${selectedArtist === artist.id ? "selected" : ""}`} key={artist.id}>
-                <button type="button" onClick={() => setSelectedArtist(artist.id)}>
+                <button type="button" onClick={() => openArtist(artist)}>
                   <span>
                     <strong>{artist.name}</strong>
                     <small>{artist.aliases?.[0] ?? (isCustom ? "Saved locally" : "K-pop artist")}</small>
@@ -596,6 +677,25 @@ export default function App() {
             );
           })}
         </section>
+        {artistQuery.trim().length >= 2 ? (
+          <section className="artist-search-results" aria-label="Online artist results">
+            <h2>More artists</h2>
+            <p className="search-status" role="status">
+              {searchLoading ? "Searching MusicBrainz..." : searchMessage}
+            </p>
+            {onlineArtists.filter((artist) => !sceneArtists.some((local) => local.musicBrainzId === artist.musicBrainzId))
+              .map((artist) => (
+                <div className="artist-row" key={artist.id}>
+                  <button type="button" onClick={() => openArtist(artist)}>
+                    <span>
+                      <strong>{artist.name}</strong>
+                      <small>{[artist.artistType, artist.disambiguation].filter(Boolean).join(" / ")}</small>
+                    </span>
+                  </button>
+                </div>
+              ))}
+          </section>
+        ) : null}
       </aside>
 
       <section className="content">
@@ -605,15 +705,15 @@ export default function App() {
             <h2>{activeArtist?.name ?? "Recent K-pop comebacks"}</h2>
             <p className="topbar-note">
               {activeArtist
-                ? `${activeArtist.aliases?.join(", ") || "Official sources, release metadata, and recent news shortcuts"}`
+                ? `${activeArtist.aliases?.slice(0, 4).join(", ") || activeArtist.group || ""}`
                 : "Upcoming releases and comeback leads from public fan calendars, news feeds, and open metadata sources."}
             </p>
             <div className="source-strip">
-              {(activeArtist?.sources ?? discoverySources).map(renderSourceLink)}
+              {(activeArtist ? getArtistSources(activeArtist) : discoverySources).map(renderSourceLink)}
             </div>
           </div>
-          <button className="sync-button" type="button" onClick={() => void refreshArtistData()} disabled={loading}>
-            {loading ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />}
+          <button className="sync-button" type="button" onClick={() => void refreshArtistData()} disabled={loading || profileLoadingId === selectedArtist}>
+            {loading || profileLoadingId === selectedArtist ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />}
             Refresh
           </button>
         </header>
@@ -650,10 +750,36 @@ export default function App() {
               ))}
             </select>
           </div>
-          <p className="data-status">
-            {dataMessage || (lastRefreshed ? `Last refreshed ${new Date(lastRefreshed).toLocaleString()}` : "Refresh to load public data.")}
+          <p className="data-status" role="status">
+            {activeArtist
+              ? profileMessages[activeArtist.id] || (artistProfiles[activeArtist.id]?.fetchedAt ? `Artist details updated ${new Date(artistProfiles[activeArtist.id].fetchedAt).toLocaleString()}` : "")
+              : dataMessage || (lastRefreshed ? `Last refreshed ${new Date(lastRefreshed).toLocaleString()}` : "Refresh to load public data.")}
           </p>
         </section>
+
+        {activeArtist && activeArtist.artistType !== "Person" ? (
+          <section className="artist-members-section" aria-label={`${activeArtist.name} members`}>
+            <div className="section-heading"><Users size={18} /><h2>Members</h2></div>
+            {activeArtist.members?.length ? (
+              <div className="artist-members-grid">
+                {activeArtist.members.map((member) => (
+                  <div className="member-row" key={member.musicBrainzId ?? member.name}>
+                    <span>
+                      {member.musicBrainzId ? (
+                        <button className="as-button artist-name" type="button" onClick={() => openMember(activeArtist, member)}>{member.name}</button>
+                      ) : <strong>{member.name}</strong>}
+                      {member.former ? <small>Former member</small> : null}
+                    </span>
+                    <div className="platform-links icon-only">
+                      {member.sources.map(renderSourceLink)}
+                      {!member.sources.some((source) => source.id === "instagram") && member.sources.length > 0 ? <small>No Instagram listed</small> : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="data-status">{profileLoadingId === activeArtist.id ? "Loading members..." : "Member details are not available from the source yet."}</p>}
+          </section>
+        ) : null}
 
         {activeView === "discover" ? (
           <section className="feed-section" aria-label="K-pop discovery">
@@ -689,17 +815,18 @@ export default function App() {
               <h2>Upcoming</h2>
             </div>
             <div className="release-grid">
+              {upcomingCalendarEvents.map(renderCalendarEvent)}
               {upcomingReleases.length > 0 ? (
                 upcomingReleases.map(renderReleaseCard)
-              ) : (
+              ) : upcomingCalendarEvents.length === 0 ? (
                 <article className="empty-card">
                   <h3>No upcoming release dates found</h3>
                   <p>
                     Future K-pop announcements are often posted first on official socials, then databases catch up.
-                    Sources are still linked below so you can jump straight to the official pages.
+                    Check the artist's source links for announcements that have not reached the calendar yet.
                   </p>
                 </article>
-              )}
+              ) : null}
             </div>
 
             <div className="section-heading">
@@ -708,14 +835,19 @@ export default function App() {
             </div>
             <div className="release-grid">
               {discography.length > 0 ? (
-                discography.map(renderReleaseCard)
+                discography.slice(0, releaseLimit).map(renderReleaseCard)
               ) : (
                 <article className="empty-card">
                   <h3>No release data loaded yet</h3>
-                  <p>Refresh your saved artists to pull release groups from MusicBrainz.</p>
+                  <p>{profileLoadingId === selectedArtist ? "Loading releases..." : "No releases are available from the source yet."}</p>
                 </article>
               )}
             </div>
+            {discography.length > releaseLimit ? (
+              <button className="more-releases" type="button" onClick={() => setReleaseLimit((current) => current + 12)}>
+                <ChevronDown size={18} /> More releases
+              </button>
+            ) : null}
           </section>
         ) : null}
 
@@ -733,11 +865,8 @@ export default function App() {
                 focusedPosts.map(renderPostCard)
               ) : (
                 <article className="empty-card">
-                  <h3>No live social feed connected yet</h3>
-                  <p>
-                    X and Instagram feeds need approved APIs. For now, this page keeps trustworthy news searches and
-                    official source links one click away instead of pretending scraped posts are reliable.
-                  </p>
+                  <h3>No recent posts loaded</h3>
+                  <p>Recent news is available through the sources above.</p>
                 </article>
               )}
             </div>
@@ -752,7 +881,7 @@ export default function App() {
             </div>
             <div className="source-card-grid">
               {artistsInFocus.map((artist) => {
-                const sourceLinks = artist.sources?.length ? artist.sources : getArtistFallbackSources(artist);
+                const sourceLinks = getArtistSources(artist);
                 return (
                   <article className="artist-summary-card" key={artist.id}>
                     <div>
@@ -765,31 +894,12 @@ export default function App() {
                           {getSourceIcon(source.id)}
                           <span>
                             <strong>{source.label}</strong>
-                            <small>{source.handle ?? source.kind}</small>
+                            <small>{source.handle ?? (source.attributionUrl ? "Via MusicBrainz" : source.kind)}</small>
                           </span>
                           <ExternalLink size={15} />
                         </a>
                       ))}
                     </div>
-                    {artist.members?.length ? (
-                      <div className="member-list">
-                        <div className="section-heading compact">
-                          <Users size={16} />
-                          <h2>Members</h2>
-                        </div>
-                        {artist.members.map((member) => (
-                          <div className="member-row" key={member.name}>
-                            <span>
-                              <strong>{member.name}</strong>
-                              <small>{member.aliases?.join(", ")}</small>
-                            </span>
-                            <div className="platform-links icon-only">
-                              {member.sources.map((source) => renderSourceLink(source))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
                   </article>
                 );
               })}

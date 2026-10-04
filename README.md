@@ -7,6 +7,9 @@ The first version focuses on the simple workflow:
 - Open a general K-pop discovery feed for upcoming comeback/release events.
 - Save K-pop artists to a personal watchlist.
 - Open an artist page for releases, news shortcuts, official links, and member links when known.
+- Search MusicBrainz for artists beyond the starter list and open their pages without entering profiles manually.
+- Automatically load the same profile layout for every artist: source links, current/former members, member socials, news searches, upcoming calendar matches, and discography.
+- Open a member's own artist page from the group page.
 - Refresh saved artists from MusicBrainz to show upcoming release groups and current discography.
 - Display release cards with album art when Cover Art Archive has an image.
 - Open quick icon links for Spotify, YouTube, Apple Music, Melon, MusicBrainz, and official artist sources.
@@ -24,6 +27,7 @@ Current working sources:
 - K-Pop Calendar open iCalendar feed for general upcoming K-pop events.
 - KpopComebacks, KBS K-pop News RSS, and Soompi as public source shortcuts.
 - MusicBrainz API for release-group metadata.
+- MusicBrainz artist relationships for group membership and artist/member social links. These are community-maintained records, with attribution on links; missing accounts are not guessed.
 - Cover Art Archive for album/release artwork when available.
 - Official/social/search links attached to each artist.
 
@@ -32,6 +36,17 @@ Prepared but optional:
 - YouTube Data API for recent official uploads. Add `VITE_YOUTUBE_API_KEY` to `.env.local` and add `youtubeChannelId` to artists before enabling this fully.
 
 Important limitation: MusicBrainz is useful for discography and release-group dates, but it may not have every future K-pop comeback announcement. X and Instagram links can be shown as official sources, but reading their feeds requires approved platform APIs/tokens. The app should use public calendars, RSS/news sources, and official links instead of scraping or inventing posts, because accuracy matters more than making the feed look full.
+
+Artist profiles are loaded on demand and cached locally for a day. Search and profile requests share a queue to respect MusicBrainz's request limit. Switching artists cancels unused profile requests; a failed refresh keeps cached releases. Search results include identity details to distinguish artists with the same name. Coverage depends on the source: artists with incomplete records may have missing members or socials. News currently links to artist-specific searches; it is not an imported article feed.
+
+Release cards are shown in batches of 12 with lazy-loaded artwork. In the desktop app, source links open in your default browser.
+
+## Checks
+
+```bash
+pnpm test
+pnpm build
+```
 
 ## Run the web app
 

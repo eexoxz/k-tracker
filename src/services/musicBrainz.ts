@@ -1,13 +1,16 @@
 import type { ApiRelease, Artist, Platform } from "../types/music";
 import { buildPlatformSearchUrl } from "../utils/links";
+import { musicBrainzRequest } from "./musicBrainzClient";
+export { musicBrainzPauseMs } from "./musicBrainzClient";
 
-const musicBrainzBaseUrl = "https://musicbrainz.org/ws/2";
-export const musicBrainzPauseMs = 1100;
-
-type MusicBrainzArtist = {
+export type MusicBrainzArtist = {
   id: string;
   name: string;
   disambiguation?: string;
+  type?: string;
+  country?: string;
+  aliases?: Array<{ name: string }>;
+  score?: number;
 };
 
 type MusicBrainzReleaseGroup = {
@@ -42,34 +45,36 @@ function getPlatformSearches(artistName: string, title: string): Record<Platform
   };
 }
 
-export async function searchMusicBrainzArtist(artistName: string) {
-  const params = new URLSearchParams({
-    query: `artist:"${artistName}"`,
-    fmt: "json",
-    limit: "1"
+export async function searchMusicBrainzArtists(artistName: string, signal?: AbortSignal) {
+  const escaped = artistName.replace(/[\\"]/g, "\\$&");
+  const data = await musicBrainzRequest<MusicBrainzArtistResponse>("artist", {
+    query: `artist:"${escaped}"`,
+    limit: "15"
+  }, signal);
+  return (data.artists ?? []).sort((a, b) => {
+    const rank = (artist: MusicBrainzArtist) => (artist.country === "KR" ? 100 : 0) + (artist.score ?? 0);
+    return rank(b) - rank(a);
   });
-
-  const response = await fetch(`${musicBrainzBaseUrl}/artist?${params}`);
-  if (!response.ok) throw new Error(`Could not search ${artistName}`);
-
-  const data = (await response.json()) as MusicBrainzArtistResponse;
-  return data.artists?.[0];
 }
 
-export async function fetchMusicBrainzReleaseGroups(artist: Artist) {
-  const mbid = artist.musicBrainzId ?? (await searchMusicBrainzArtist(artist.name))?.id;
+export async function searchMusicBrainzArtist(artistName: string, signal?: AbortSignal) {
+  const matches = await searchMusicBrainzArtists(artistName, signal);
+  const normalize = (name: string) => name.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+  const exact = matches.filter((artist) => [artist.name, ...(artist.aliases ?? []).map((alias) => alias.name)]
+    .some((name) => normalize(name) === normalize(artistName)));
+  const korean = exact.filter((artist) => artist.country === "KR");
+  if (korean.length === 1) return korean[0];
+  if (exact.length === 1) return exact[0];
+  throw new Error(`Choose ${artistName} from the online search results to confirm the artist.`);
+}
+
+export async function fetchMusicBrainzReleaseGroups(artist: Artist, signal?: AbortSignal) {
+  const mbid = artist.musicBrainzId ?? (await searchMusicBrainzArtist(artist.name, signal))?.id;
   if (!mbid) return [];
 
-  const params = new URLSearchParams({
-    artist: mbid,
-    fmt: "json",
-    limit: "100"
-  });
-
-  const response = await fetch(`${musicBrainzBaseUrl}/release-group?${params}`);
-  if (!response.ok) throw new Error(`Could not load releases for ${artist.name}`);
-
-  const data = (await response.json()) as MusicBrainzReleaseGroupResponse;
+  const data = await musicBrainzRequest<MusicBrainzReleaseGroupResponse>("release-group", {
+    artist: mbid, limit: "100"
+  }, signal);
   return (data["release-groups"] ?? [])
     .map((group): ApiRelease | null => {
       const releaseDate = normalizeDate(group["first-release-date"]);

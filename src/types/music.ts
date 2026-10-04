@@ -18,6 +18,7 @@ export type ArtistSource = {
   url: string;
   handle?: string;
   kind: "official" | "database" | "search" | "news";
+  attributionUrl?: string;
 };
 
 export type Artist = {
@@ -30,6 +31,13 @@ export type Artist = {
   youtubeChannelId?: string;
   sources?: ArtistSource[];
   members?: ArtistMember[];
+  artistType?: string;
+  disambiguation?: string;
+};
+
+export type ArtistProfile = Artist & {
+  fetchedAt: string;
+  membersComplete: boolean;
 };
 
 export type SourceCredit = {
@@ -66,6 +74,8 @@ export type ArtistMember = {
   name: string;
   aliases?: string[];
   sources: ArtistSource[];
+  musicBrainzId?: string;
+  former?: boolean;
 };
 
 export type KpopCalendarEvent = {
