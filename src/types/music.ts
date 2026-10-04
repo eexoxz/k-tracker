@@ -7,6 +7,7 @@ export type SourcePlatform =
   | "musicBrainz"
   | "coverArtArchive"
   | "instagram"
+  | "tiktok"
   | "x"
   | "website"
   | "news";
@@ -28,6 +29,7 @@ export type Artist = {
   musicBrainzId?: string;
   youtubeChannelId?: string;
   sources?: ArtistSource[];
+  members?: ArtistMember[];
 };
 
 export type SourceCredit = {
@@ -58,4 +60,22 @@ export type ArtistPost = {
   url: string;
   thumbnailUrl?: string;
   source: SourceCredit;
+};
+
+export type ArtistMember = {
+  name: string;
+  aliases?: string[];
+  sources: ArtistSource[];
+};
+
+export type KpopCalendarEvent = {
+  id: string;
+  artistName: string;
+  title: string;
+  date: string;
+  type: string;
+  source: SourceCredit;
+  url?: string;
+  confirmed?: boolean;
+  description?: string;
 };

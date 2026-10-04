@@ -776,7 +776,8 @@ h1 {
 
 .icon-link:hover,
 .source-list a:hover,
-.post-card a:hover {
+.post-card a:hover,
+.public-source-card:hover {
   color: #0f5f5b;
   background: #d9f0eb;
 }
@@ -866,6 +867,32 @@ h1 {
   background: #f0eadf;
 }
 
+.public-source-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.public-source-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 58px;
+  padding: 12px;
+  border: 1px solid rgba(22, 32, 42, 0.09);
+  border-radius: 8px;
+  color: #16202a;
+  text-decoration: none;
+  background: #ffffff;
+}
+
+.public-source-card small {
+  display: block;
+  margin-top: 2px;
+  color: #657586;
+}
+
 .source-list small {
   display: block;
   margin-top: 2px;
@@ -875,6 +902,49 @@ h1 {
 .post-list {
   display: grid;
   gap: 10px;
+}
+
+.event-list {
+  display: grid;
+  gap: 10px;
+}
+
+.event-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 14px;
+  align-items: center;
+  min-height: 98px;
+  padding: 14px;
+  border: 1px solid rgba(22, 32, 42, 0.09);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.event-card h3,
+.event-card p {
+  margin-bottom: 5px;
+}
+
+.event-card p {
+  color: #607080;
+  font-size: 0.87rem;
+}
+
+.event-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.event-meta span {
+  padding: 5px 8px;
+  border-radius: 999px;
+  color: #1c5b58;
+  font-size: 0.78rem;
+  font-weight: 800;
+  background: #d9f0eb;
 }
 
 .post-card a {
@@ -931,6 +1001,36 @@ h1 {
   color: #1c5b58;
   font-weight: 800;
   text-decoration: none;
+}
+
+.section-heading.compact {
+  margin-top: 4px;
+}
+
+.section-heading.compact h2 {
+  font-size: 0.95rem;
+}
+
+.member-list {
+  display: grid;
+  gap: 8px;
+}
+
+.member-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 54px;
+  padding: 10px;
+  border-radius: 8px;
+  background: #fbf8f1;
+}
+
+.member-row small {
+  display: block;
+  margin-top: 2px;
+  color: #657586;
 }
 
 .spin {
@@ -1041,7 +1141,8 @@ h1 {
   .release-grid,
   .comeback-grid,
   .artist-summary-grid,
-  .source-card-grid {
+  .source-card-grid,
+  .public-source-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1126,5 +1227,14 @@ h1 {
 
   .post-thumb {
     grid-column: 1 / -1;
+  }
+
+  .event-card,
+  .member-row {
+    grid-template-columns: 1fr;
+  }
+
+  .event-meta {
+    justify-content: flex-start;
   }
 }

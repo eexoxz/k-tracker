@@ -16,16 +16,20 @@ import {
   Radio,
   RefreshCw,
   Search,
+  Sparkles,
   Trash2,
   Twitter,
+  Users,
   Youtube
 } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { artists } from "./data/catalog";
+import { discoverySources, fallbackCalendarEvents, getArtistNewsSources, sourceCredits } from "./data/publicSources";
+import { fetchKpopCalendarEvents } from "./services/kpopCalendar";
 import { fetchMusicBrainzReleaseGroups, musicBrainzPauseMs } from "./services/musicBrainz";
 import { fetchRecentYoutubePosts, isYoutubeReady } from "./services/youtube";
-import type { ApiRelease, Artist, ArtistPost, ArtistSource, MusicScene, Platform, SourcePlatform } from "./types/music";
+import type { ApiRelease, Artist, ArtistPost, ArtistSource, KpopCalendarEvent, MusicScene, Platform, SourcePlatform } from "./types/music";
 import { buildPlatformSearchUrl, platformLabels } from "./utils/links";
 import { readStoredValue, readStringList, writeStoredValue, writeStringList } from "./utils/storage";
 
@@ -37,8 +41,9 @@ const scenes: Array<{ id: MusicScene; label: string; available: boolean }> = [
 ];
 
 const appViews = [
+  { id: "discover", label: "Discover" },
   { id: "releases", label: "Releases" },
-  { id: "posts", label: "Posts" },
+  { id: "news", label: "News" },
   { id: "sources", label: "Sources" }
 ] as const;
 
@@ -53,10 +58,11 @@ type LocalPreferences = {
 const defaultPreferences: LocalPreferences = {
   scene: "kpop",
   selectedArtist: "all",
-  activeView: "releases"
+  activeView: "discover"
 };
 
 const apiSources = [
+  ...sourceCredits,
   { label: "MusicBrainz", url: "https://musicbrainz.org/doc/MusicBrainz_API", note: "release metadata" },
   { label: "Cover Art Archive", url: "https://coverartarchive.org/", note: "album artwork" },
   { label: "YouTube Data API", url: "https://developers.google.com/youtube/v3", note: "official posts when configured" }
@@ -91,7 +97,7 @@ function isUpcoming(date: string) {
 }
 
 function getValidatedView(value: unknown): AppView {
-  return appViews.some((view) => view.id === value) ? (value as AppView) : "releases";
+  return appViews.some((view) => view.id === value) ? (value as AppView) : "discover";
 }
 
 function getInitialPreferences() {
@@ -109,6 +115,8 @@ function getSourceIcon(source: SourcePlatform | Platform) {
       return <Youtube size={17} />;
     case "instagram":
       return <Instagram size={17} />;
+    case "tiktok":
+      return <Music size={17} />;
     case "x":
       return <Twitter size={17} />;
     case "spotify":
@@ -149,6 +157,9 @@ export default function App() {
   const [newArtistAliases, setNewArtistAliases] = useState("");
   const [watchlist, setWatchlist] = useState<string[]>(() => readStringList("watchlist", ["aespa", "ive", "iu"]));
   const [customArtists, setCustomArtists] = useState<Artist[]>(() => readStoredValue("customArtists", []));
+  const [calendarEvents, setCalendarEvents] = useState<KpopCalendarEvent[]>(() =>
+    readStoredValue("calendarEvents", fallbackCalendarEvents)
+  );
   const [apiReleases, setApiReleases] = useState<ApiRelease[]>(() => readStoredValue("apiReleases", []));
   const [artistPosts, setArtistPosts] = useState<ArtistPost[]>(() => readStoredValue("artistPosts", []));
   const [lastRefreshed, setLastRefreshed] = useState(() => readStoredValue("lastRefreshed", ""));
@@ -177,6 +188,10 @@ export default function App() {
   }, [customArtists]);
 
   useEffect(() => {
+    writeStoredValue("calendarEvents", calendarEvents);
+  }, [calendarEvents]);
+
+  useEffect(() => {
     writeStoredValue("apiReleases", apiReleases);
   }, [apiReleases]);
 
@@ -199,17 +214,24 @@ export default function App() {
   }, [sceneArtists, selectedArtist]);
 
   useEffect(() => {
-    if (didAutoRefresh.current || apiReleases.length > 0 || watchedArtists.length === 0) return;
+    if (didAutoRefresh.current || (apiReleases.length > 0 && calendarEvents.length > 1)) return;
     didAutoRefresh.current = true;
     void refreshArtistData();
-  }, [apiReleases.length, watchedArtists.length]);
+  }, [apiReleases.length, calendarEvents.length]);
 
   const matchingArtists = useMemo(() => {
     const query = artistQuery.trim().toLowerCase();
     if (!query) return sceneArtists;
 
     return sceneArtists.filter((artist) =>
-      [artist.name, ...(artist.aliases ?? [])].join(" ").toLowerCase().includes(query)
+      [
+        artist.name,
+        ...(artist.aliases ?? []),
+        ...(artist.members ?? []).flatMap((member) => [member.name, ...(member.aliases ?? [])])
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(query)
     );
   }, [artistQuery, sceneArtists]);
 
@@ -245,21 +267,37 @@ export default function App() {
     return artistPosts.filter((post) => artistIds.has(post.artistId)).sort((a, b) => b.date.localeCompare(a.date));
   }, [artistPosts, artistsInFocus]);
 
+  const visibleCalendarEvents = useMemo(() => {
+    const query = releaseQuery.trim().toLowerCase();
+    return calendarEvents.filter((event) => {
+      if (!query) return true;
+      return `${event.artistName} ${event.title} ${event.type} ${event.description ?? ""}`.toLowerCase().includes(query);
+    });
+  }, [calendarEvents, releaseQuery]);
+
+  const activeArtistNewsSources = useMemo(
+    () => (activeArtist ? getArtistNewsSources(activeArtist) : discoverySources),
+    [activeArtist]
+  );
+
   async function refreshArtistData() {
     const artistsToRefresh = artistsInFocus.length > 0 ? artistsInFocus : watchedArtists;
-
-    if (artistsToRefresh.length === 0) {
-      setDataMessage("Save at least one artist first.");
-      return;
-    }
 
     setLoading(true);
     setDataMessage("Refreshing public metadata...");
 
     try {
+      let calendarMessage = "";
       const releases: ApiRelease[] = [];
       const posts: ArtistPost[] = [];
       const failedArtists: string[] = [];
+
+      try {
+        const events = await fetchKpopCalendarEvents();
+        setCalendarEvents(events.length > 0 ? events : fallbackCalendarEvents);
+      } catch {
+        calendarMessage = " K-Pop Calendar could not be reached, so source links are shown instead.";
+      }
 
       for (const artist of artistsToRefresh) {
         try {
@@ -291,8 +329,10 @@ export default function App() {
       setLastRefreshed(new Date().toISOString());
       setDataMessage(
         failedArtists.length > 0
-          ? `Updated what I could. Could not refresh: ${failedArtists.join(", ")}.`
-          : "Updated from connected public sources."
+          ? `Updated what I could. Could not refresh: ${failedArtists.join(", ")}.${calendarMessage}`
+          : artistsToRefresh.length > 0
+            ? `Updated from connected public sources.${calendarMessage}`
+            : `Updated K-pop discovery sources.${calendarMessage}`
       );
     } catch (error) {
       setDataMessage(error instanceof Error ? error.message : "Could not refresh data right now.");
@@ -413,6 +453,64 @@ export default function App() {
     );
   }
 
+  function renderCalendarEvent(event: KpopCalendarEvent) {
+    const matchingArtist = sceneArtists.find(
+      (artist) => artist.name.toLowerCase() === event.artistName.toLowerCase()
+    );
+
+    return (
+      <article className="event-card" key={event.id}>
+        <div>
+          <p>{formatDate(event.date)}</p>
+          <h3>{event.title}</h3>
+          <button
+            className="artist-name as-button"
+            type="button"
+            onClick={() => {
+              if (matchingArtist) {
+                setSelectedArtist(matchingArtist.id);
+                setActiveView("releases");
+              } else {
+                setArtistQuery(event.artistName);
+              }
+            }}
+          >
+            {event.artistName}
+          </button>
+        </div>
+        <div className="event-meta">
+          <span>{event.type}</span>
+          {event.confirmed === false ? <span>TBA</span> : null}
+        </div>
+        <div className="platform-links icon-only">
+          {event.url ? (
+            <a className="icon-link" href={event.url} target="_blank" rel="noreferrer" title="Open event source">
+              <ExternalLink size={17} />
+              <span className="sr-only">Open event source</span>
+            </a>
+          ) : null}
+          <a className="icon-link source-link" href={event.source.url} target="_blank" rel="noreferrer" title={event.source.label}>
+            {getSourceIcon("website")}
+            <span className="sr-only">{event.source.label}</span>
+          </a>
+        </div>
+      </article>
+    );
+  }
+
+  function renderPublicSourceCard(source: ArtistSource) {
+    return (
+      <a className="public-source-card" href={source.url} target="_blank" rel="noreferrer" key={`${source.label}-${source.url}`}>
+        {getSourceIcon(source.id)}
+        <span>
+          <strong>{source.label}</strong>
+          <small>{source.kind}</small>
+        </span>
+        <ExternalLink size={15} />
+      </a>
+    );
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar" aria-label="Artist watchlist">
@@ -503,15 +601,15 @@ export default function App() {
       <section className="content">
         <header className="artist-hero">
           <div>
-            <p className="eyebrow">{activeArtist ? "Artist page" : "Saved artist feed"}</p>
-            <h2>{activeArtist?.name ?? "All saved artists"}</h2>
+            <p className="eyebrow">{activeArtist ? "Artist page" : "K-pop discovery"}</p>
+            <h2>{activeArtist?.name ?? "Recent K-pop comebacks"}</h2>
             <p className="topbar-note">
               {activeArtist
-                ? `${activeArtist.aliases?.join(", ") || "Official sources and public release metadata"}`
-                : "Recent releases and source links from artists you saved on this PC."}
+                ? `${activeArtist.aliases?.join(", ") || "Official sources, release metadata, and recent news shortcuts"}`
+                : "Upcoming releases and comeback leads from public fan calendars, news feeds, and open metadata sources."}
             </p>
             <div className="source-strip">
-              {(activeArtist?.sources ?? []).map(renderSourceLink)}
+              {(activeArtist?.sources ?? discoverySources).map(renderSourceLink)}
             </div>
           </div>
           <button className="sync-button" type="button" onClick={() => void refreshArtistData()} disabled={loading}>
@@ -540,7 +638,7 @@ export default function App() {
               <input
                 value={releaseQuery}
                 onChange={(event) => setReleaseQuery(event.target.value)}
-                placeholder="Search release"
+                placeholder="Search artist, release, or news"
               />
             </label>
             <select value={selectedArtist} onChange={(event) => setSelectedArtist(event.target.value)}>
@@ -556,6 +654,33 @@ export default function App() {
             {dataMessage || (lastRefreshed ? `Last refreshed ${new Date(lastRefreshed).toLocaleString()}` : "Refresh to load public data.")}
           </p>
         </section>
+
+        {activeView === "discover" ? (
+          <section className="feed-section" aria-label="K-pop discovery">
+            <div className="section-heading">
+              <Sparkles size={18} />
+              <h2>Upcoming from public calendars</h2>
+            </div>
+            <div className="event-list">
+              {visibleCalendarEvents.length > 0 ? (
+                visibleCalendarEvents.map(renderCalendarEvent)
+              ) : (
+                <article className="empty-card">
+                  <h3>No matching calendar events</h3>
+                  <p>Try a broader artist or release search, or use the source links below.</p>
+                </article>
+              )}
+            </div>
+
+            <div className="section-heading">
+              <Globe2 size={18} />
+              <h2>Public comeback/news sources</h2>
+            </div>
+            <div className="public-source-grid">
+              {discoverySources.map(renderPublicSourceCard)}
+            </div>
+          </section>
+        ) : null}
 
         {activeView === "releases" ? (
           <section className="feed-section" aria-label="Releases">
@@ -594,21 +719,24 @@ export default function App() {
           </section>
         ) : null}
 
-        {activeView === "posts" ? (
-          <section className="feed-section" aria-label="Recent posts">
+        {activeView === "news" ? (
+          <section className="feed-section" aria-label="Recent news">
             <div className="section-heading">
-              <Youtube size={18} />
-              <h2>Recent official posts</h2>
+              <Newspaper size={18} />
+              <h2>{activeArtist ? `${activeArtist.name} news shortcuts` : "K-pop news sources"}</h2>
+            </div>
+            <div className="public-source-grid">
+              {activeArtistNewsSources.map(renderPublicSourceCard)}
             </div>
             <div className="post-list">
               {focusedPosts.length > 0 ? (
                 focusedPosts.map(renderPostCard)
               ) : (
                 <article className="empty-card">
-                  <h3>No official posts connected yet</h3>
+                  <h3>No live social feed connected yet</h3>
                   <p>
-                    The app is ready for the YouTube Data API, but it needs a local API key and official channel IDs before
-                    it can fetch recent uploads safely. X and Instagram links stay clickable, but feeds need approved APIs.
+                    X and Instagram feeds need approved APIs. For now, this page keeps trustworthy news searches and
+                    official source links one click away instead of pretending scraped posts are reliable.
                   </p>
                 </article>
               )}
@@ -643,6 +771,25 @@ export default function App() {
                         </a>
                       ))}
                     </div>
+                    {artist.members?.length ? (
+                      <div className="member-list">
+                        <div className="section-heading compact">
+                          <Users size={16} />
+                          <h2>Members</h2>
+                        </div>
+                        {artist.members.map((member) => (
+                          <div className="member-row" key={member.name}>
+                            <span>
+                              <strong>{member.name}</strong>
+                              <small>{member.aliases?.join(", ")}</small>
+                            </span>
+                            <div className="platform-links icon-only">
+                              {member.sources.map((source) => renderSourceLink(source))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                   </article>
                 );
               })}

@@ -2,6 +2,50 @@ import type { Artist } from "../types/music";
 
 export const artists: Artist[] = [
   {
+    id: "blackpink",
+    name: "BLACKPINK",
+    scene: "kpop",
+    aliases: ["블랙핑크", "BP"],
+    sources: [
+      { id: "website", label: "Linktree", url: "https://linktr.ee/blackpink", kind: "official" },
+      { id: "instagram", label: "Instagram", handle: "@blackpinkofficial", url: "https://www.instagram.com/blackpinkofficial/", kind: "official" },
+      { id: "x", label: "X", handle: "@BLACKPINK", url: "https://x.com/BLACKPINK", kind: "official" },
+      { id: "tiktok", label: "TikTok", handle: "@bp_tiktok", url: "https://www.tiktok.com/@bp_tiktok", kind: "official" },
+      { id: "youtube", label: "YouTube", handle: "@BLACKPINK", url: "https://www.youtube.com/@BLACKPINK", kind: "official" },
+      { id: "spotify", label: "Spotify", url: "https://open.spotify.com/search/BLACKPINK", kind: "search" }
+    ],
+    members: [
+      {
+        name: "JISOO",
+        aliases: ["Kim Jisoo", "지수"],
+        sources: [
+          { id: "instagram", label: "Instagram", handle: "@sooyaaa__", url: "https://www.instagram.com/sooyaaa__/", kind: "official" }
+        ]
+      },
+      {
+        name: "JENNIE",
+        aliases: ["Jennie Kim", "제니"],
+        sources: [
+          { id: "instagram", label: "Instagram", handle: "@jennierubyjane", url: "https://www.instagram.com/jennierubyjane/", kind: "official" }
+        ]
+      },
+      {
+        name: "ROSE",
+        aliases: ["Rosé", "Park Chaeyoung", "로제"],
+        sources: [
+          { id: "instagram", label: "Instagram", handle: "@roses_are_rosie", url: "https://www.instagram.com/roses_are_rosie/", kind: "official" }
+        ]
+      },
+      {
+        name: "LISA",
+        aliases: ["Lalisa Manobal", "리사"],
+        sources: [
+          { id: "instagram", label: "Instagram", handle: "@lalalalisa_m", url: "https://www.instagram.com/lalalalisa_m/", kind: "official" }
+        ]
+      }
+    ]
+  },
+  {
     id: "aespa",
     name: "aespa",
     scene: "kpop",
