@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>K-tracker Font Preview</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Noto+Sans+KR:wght@400;600;700;800&family=Outfit:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@400;600;700;800&family=Sora:wght@400;600;700;800&family=Space+Grotesk:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      as="style"
+      crossorigin
+      href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css"
+    />
+    <style>
+      :root {
+        color: #17202a;
+        background: #f6f3ee;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 32px;
+      }
+
+      main {
+        display: grid;
+        gap: 18px;
+        max-width: 1180px;
+        margin: 0 auto;
+      }
+
+      header {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 18px;
+        margin-bottom: 8px;
+        font-family: Pretendard, "Noto Sans KR", sans-serif;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        margin-bottom: 6px;
+        font-size: 2rem;
+      }
+
+      .intro {
+        max-width: 640px;
+        margin-bottom: 0;
+        color: #586879;
+        line-height: 1.55;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .sample {
+        display: grid;
+        gap: 14px;
+        min-height: 290px;
+        padding: 18px;
+        border: 1px solid rgba(22, 32, 42, 0.1);
+        border-radius: 8px;
+        background: #ffffff;
+      }
+
+      .pretendard {
+        font-family: Pretendard, "Noto Sans KR", sans-serif;
+      }
+
+      .noto {
+        font-family: "Noto Sans KR", sans-serif;
+      }
+
+      .outfit {
+        font-family: Outfit, "Noto Sans KR", sans-serif;
+      }
+
+      .sora {
+        font-family: Sora, "Noto Sans KR", sans-serif;
+      }
+
+      .jakarta {
+        font-family: "Plus Jakarta Sans", "Noto Sans KR", sans-serif;
+      }
+
+      .manrope {
+        font-family: Manrope, "Noto Sans KR", sans-serif;
+      }
+
+      .space {
+        font-family: "Space Grotesk", "Noto Sans KR", sans-serif;
+      }
+
+      .font-name {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 0;
+      }
+
+      .font-name span {
+        padding: 5px 8px;
+        border-radius: 999px;
+        color: #1e5d58;
+        font-size: 0.78rem;
+        font-weight: 800;
+        background: #ddf0ea;
+      }
+
+      .eyebrow {
+        margin-bottom: 4px;
+        color: #657586;
+        font-size: 0.75rem;
+        font-weight: 800;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      .release {
+        display: grid;
+        gap: 8px;
+        padding: 14px;
+        border: 1px solid rgba(22, 32, 42, 0.08);
+        border-radius: 8px;
+        background: #f8f6f1;
+      }
+
+      .release h3 {
+        margin-bottom: 0;
+        font-size: 1.35rem;
+      }
+
+      .artist {
+        margin-bottom: 0;
+        color: #1f5474;
+        font-weight: 800;
+      }
+
+      .copy {
+        margin-bottom: 0;
+        color: #536271;
+        line-height: 1.5;
+      }
+
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      button,
+      a {
+        display: inline-flex;
+        align-items: center;
+        min-height: 36px;
+        padding: 0 11px;
+        border: 0;
+        border-radius: 8px;
+        color: #16202a;
+        font: inherit;
+        font-weight: 800;
+        text-decoration: none;
+        background: #e7c46b;
+      }
+
+      a.secondary {
+        background: #e8eee9;
+      }
+
+      .hangul {
+        color: #687789;
+      }
+
+      @media (max-width: 820px) {
+        body {
+          padding: 18px;
+        }
+
+        .grid {
+          grid-template-columns: 1fr;
+        }
+
+        header {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <p class="eyebrow">K-tracker font options</p>
+          <h1>Pick a personality for the app</h1>
+          <p class="intro">
+            These samples use release cards, buttons, artist names, and Hangul snippets so you can judge the fonts
+            inside the kind of UI K-tracker actually has.
+          </p>
+        </div>
+      </header>
+
+      <section class="grid">
+        <article class="sample pretendard">
+          <h2 class="font-name">Pretendard <span>best fit</span></h2>
+          <div class="release">
+            <p class="eyebrow">Sep 29, 2026</p>
+            <h3>Newest releases and artist updates</h3>
+            <p class="artist">aespa · 에스파</p>
+            <p class="copy">Clean Korean app feel, modern without looking too startup-ish. Great for daily use.</p>
+            <div class="controls">
+              <button>Check releases</button>
+              <a class="secondary" href="#">Spotify</a>
+            </div>
+          </div>
+        </article>
+
+        <article class="sample noto">
+          <h2 class="font-name">Noto Sans KR <span>safest</span></h2>
+          <div class="release">
+            <p class="eyebrow">Sep 29, 2026</p>
+            <h3>Newest releases and artist updates</h3>
+            <p class="artist">IVE · 아이브</p>
+            <p class="copy">Very readable and reliable for Korean text. Practical, but a little less stylish.</p>
+            <div class="controls">
+              <button>Check releases</button>
+              <a class="secondary" href="#">YouTube</a>
+            </div>
+          </div>
+        </article>
+
+        <article class="sample outfit">
+          <h2 class="font-name">Outfit <span>friendly</span></h2>
+          <div class="release">
+            <p class="eyebrow">Sep 29, 2026</p>
+            <h3>Newest releases and artist updates</h3>
+            <p class="artist">NewJeans · 뉴진스</p>
+            <p class="copy">Rounder and softer. Nice if you want the tracker to feel personal and casual.</p>
+            <div class="controls">
+              <button>Check releases</button>
+              <a class="secondary" href="#">Apple Music</a>
+            </div>
+          </div>
+        </article>
+
+        <article class="sample sora">
+          <h2 class="font-name">Sora <span>polished</span></h2>
+          <div class="release">
+            <p class="eyebrow">Sep 29, 2026</p>
+            <h3>Newest releases and artist updates</h3>
+            <p class="artist">LE SSERAFIM · 르세라핌</p>
+            <p class="copy">A little more futuristic. Good for a release radar, but stronger in headings.</p>
+            <div class="controls">
+              <button>Check releases</button>
+              <a class="secondary" href="#">Melon</a>
+            </div>
+          </div>
+        </article>
+
+        <article class="sample jakarta">
+          <h2 class="font-name">Plus Jakarta Sans <span>warm</span></h2>
+          <div class="release">
+            <p class="eyebrow">Sep 29, 2026</p>
+            <h3>Newest releases and artist updates</h3>
+            <p class="artist">SEVENTEEN · 세븐틴</p>
+            <p class="copy">Still clean, but with more warmth than a default dashboard font.</p>
+            <div class="controls">
+              <button>Check releases</button>
+              <a class="secondary" href="#">Spotify</a>
+            </div>
+          </div>
+        </article>
+
+        <article class="sample manrope">
+          <h2 class="font-name">Manrope <span>sleek</span></h2>
+          <div class="release">
+            <p class="eyebrow">Sep 29, 2026</p>
+            <h3>Newest releases and artist updates</h3>
+            <p class="artist">TAEYEON · 태연</p>
+            <p class="copy">Quiet and modern. A good choice if you want the app to feel mature and calm.</p>
+            <div class="controls">
+              <button>Check releases</button>
+              <a class="secondary" href="#">YouTube</a>
+            </div>
+          </div>
+        </article>
+
+        <article class="sample space">
+          <h2 class="font-name">Space Grotesk <span>heading only</span></h2>
+          <div class="release">
+            <p class="eyebrow">Sep 29, 2026</p>
+            <h3>Newest releases and artist updates</h3>
+            <p class="artist hangul">Stray Kids · 스트레이 키즈</p>
+            <p class="copy">Distinctive and cool, but I would pair it with Pretendard for body text.</p>
+            <div class="controls">
+              <button>Check releases</button>
+              <a class="secondary" href="#">Apple Music</a>
+            </div>
+          </div>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>
